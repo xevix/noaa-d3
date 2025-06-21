@@ -1,5 +1,6 @@
 const express = require('express');
 const path = require('path');
+const fs = require('fs');
 const duckdb = require('duckdb');
 
 const app = express();
@@ -15,13 +16,33 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
+app.get('/api/years', async (req, res) => {
+    try {
+        const dataDir = '/Users/xevix/Downloads/data/noaa/by_year';
+        
+        // Read directory names and extract years
+        const dirNames = fs.readdirSync(dataDir, { withFileTypes: true })
+            .filter(dirent => dirent.isDirectory())
+            .map(dirent => dirent.name)
+            .filter(name => name.startsWith('YEAR='))
+            .map(name => parseInt(name.split('=')[1]))
+            .filter(year => !isNaN(year))
+            .sort((a, b) => b - a); // Sort descending (newest first)
+        
+        console.log(`Found ${dirNames.length} years available:`, dirNames.slice(0, 10), dirNames.length > 10 ? '...' : '');
+        res.json(dirNames);
+        
+    } catch (error) {
+        console.error('Server error getting years:', error);
+        res.status(500).json({ error: 'Server error getting years' });
+    }
+});
+
 app.get('/api/weather/:year/:element', async (req, res) => {
     const { year, element } = req.params;
     const limit = req.query.limit || 5000;
-    
+
     try {
-        const dataPath = `/Users/xevix/Downloads/data/noaa/by_year/YEAR=${year}/ELEMENT=${element}/*.parquet`;
-        
         const query = `
             WITH daily_averages AS (
                 SELECT 
@@ -31,9 +52,11 @@ app.get('/api/weather/:year/:element', async (req, res) => {
                     EXTRACT(MONTH FROM STRPTIME(DATE, '%Y%m%d')) as month,
                     EXTRACT(DAY FROM STRPTIME(DATE, '%Y%m%d')) as day,
                     EXTRACT(YEAR FROM STRPTIME(DATE, '%Y%m%d')) as year
-                FROM read_parquet('${dataPath}')
+                FROM read_parquet('/Users/xevix/Downloads/data/noaa/by_year/**/*.parquet', hive_partitioning = true)
                 WHERE DATA_VALUE IS NOT NULL 
                     AND DATA_VALUE != -9999  -- Remove missing data flags
+                    AND YEAR = ${year}
+                    AND ELEMENT = '${element}'
                 GROUP BY DATE
                 ORDER BY DATE
             )
@@ -47,7 +70,7 @@ app.get('/api/weather/:year/:element', async (req, res) => {
             FROM daily_averages
             LIMIT ${limit}
         `;
-        
+
         connection.all(query, (err, result) => {
             if (err) {
                 console.error('Database error:', err);
@@ -58,7 +81,7 @@ app.get('/api/weather/:year/:element', async (req, res) => {
                     if (result.length > 0) {
                         console.log('Sample row:', result[0]);
                     }
-                    
+
                     const processedData = result.map((row, index) => {
                         try {
                             return {
@@ -74,7 +97,7 @@ app.get('/api/weather/:year/:element', async (req, res) => {
                             return null;
                         }
                     }).filter(row => row !== null);
-                    
+
                     console.log(`Processed ${processedData.length} rows successfully`);
                     res.json(processedData);
                 } catch (processingError) {

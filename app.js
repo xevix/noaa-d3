@@ -1,12 +1,13 @@
 class NOAAWeatherVisualizer {
     constructor() {
         this.currentData = null;
+        this.availableYears = [];
         
         this.initializeEventListeners();
         this.setupChart();
         
-        // Load default data on page load
-        this.loadDefaultData();
+        // Initialize the application
+        this.initialize();
     }
     
     initializeEventListeners() {
@@ -29,6 +30,57 @@ class NOAAWeatherVisualizer {
         });
     }
     
+    async initialize() {
+        try {
+            // Load available years first
+            await this.loadAvailableYears();
+            // Then load default data
+            await this.loadDefaultData();
+        } catch (error) {
+            console.error('Error during initialization:', error);
+            this.showErrorMessage('Failed to initialize application. Please refresh the page.');
+        }
+    }
+    
+    async loadAvailableYears() {
+        try {
+            document.getElementById('loading').style.display = 'block';
+            const response = await fetch('/api/years');
+            if (!response.ok) {
+                throw new Error('Failed to fetch available years');
+            }
+            
+            this.availableYears = await response.json();
+            this.populateYearSelector();
+            
+        } catch (error) {
+            console.error('Error loading available years:', error);
+            // Fallback to hardcoded years if API fails
+            this.availableYears = [2024, 2023, 2022, 2021, 2020];
+            this.populateYearSelector();
+        } finally {
+            document.getElementById('loading').style.display = 'none';
+        }
+    }
+    
+    populateYearSelector() {
+        const yearSelect = document.getElementById('year-select');
+        yearSelect.innerHTML = ''; // Clear existing options
+        
+        this.availableYears.forEach((year, index) => {
+            const option = document.createElement('option');
+            option.value = year;
+            option.textContent = year;
+            // Select the most recent year by default
+            if (index === 0) {
+                option.selected = true;
+            }
+            yearSelect.appendChild(option);
+        });
+        
+        console.log(`Populated year selector with ${this.availableYears.length} years (${this.availableYears[this.availableYears.length-1]} - ${this.availableYears[0]})`);
+    }
+    
     async loadDefaultData() {
         // Load data with default selections on page load
         try {
@@ -36,17 +88,21 @@ class NOAAWeatherVisualizer {
             await this.loadAndVisualizeData();
         } catch (error) {
             console.error('Error loading default data:', error);
-            // Show a friendly message instead of an alert on page load
-            this.g.append('text')
-                .attr('x', this.width / 2)
-                .attr('y', this.height / 2)
-                .attr('text-anchor', 'middle')
-                .text('Click "Load Data" to view weather visualizations')
-                .style('font-size', '16px')
-                .style('fill', '#7f8c8d');
+            this.showErrorMessage('Click "🔄 Refresh" to load weather data');
         } finally {
             document.getElementById('loading').style.display = 'none';
         }
+    }
+    
+    showErrorMessage(message) {
+        this.g.selectAll('*').remove();
+        this.g.append('text')
+            .attr('x', this.width / 2)
+            .attr('y', this.height / 2)
+            .attr('text-anchor', 'middle')
+            .text(message)
+            .style('font-size', '16px')
+            .style('fill', '#7f8c8d');
     }
     
     setupChart() {
