@@ -119,11 +119,11 @@ class NOAAWeatherVisualizer {
 
         // console.log(`Populated year selector with ${this.availableYears.length} years (${this.availableYears[this.availableYears.length-1]} - ${this.availableYears[0]})`);
     }
-    
+
     async loadAvailableElements() {
         const year = document.getElementById('year-select').value;
         if (!year) return;
-        
+
         try {
             const response = await fetch(`/api/elements/${year}`);
             if (!response.ok) {
@@ -140,7 +140,7 @@ class NOAAWeatherVisualizer {
             this.populateElementSelector();
         }
     }
-    
+
     populateElementSelector() {
         const elementSelect = document.getElementById('element-select');
         const currentElement = elementSelect.value;
@@ -159,7 +159,7 @@ class NOAAWeatherVisualizer {
                     option.title = `Unit: ${element.unit}`;
                 }
             }
-            
+
             // Select the first element by default, or keep current if still available
             const elementCode = typeof element === 'string' ? element : element.code;
             if ((currentElement && elementCode === currentElement) || (!currentElement && index === 0)) {
@@ -170,22 +170,22 @@ class NOAAWeatherVisualizer {
 
         console.log(`Populated element selector with ${this.availableElements.length} elements for year ${document.getElementById('year-select').value}`);
     }
-    
+
     async loadStations() {
         const year = document.getElementById('year-select').value;
         const element = document.getElementById('element-select').value;
-        
+
         if (!year || !element) return;
-        
+
         try {
             const response = await fetch(`/api/stations/${year}/${element}`);
             if (!response.ok) {
                 throw new Error('Failed to fetch available stations');
             }
-            
+
             this.availableStations = await response.json();
             this.populateStationSelector();
-            
+
         } catch (error) {
             console.error('Error loading available stations:', error);
             // Clear stations on error
@@ -193,48 +193,48 @@ class NOAAWeatherVisualizer {
             this.populateStationSelector();
         }
     }
-    
+
     populateStationSelector() {
         const stationSelect = document.getElementById('station-select');
         stationSelect.innerHTML = '<option value="">All Stations (Average)</option>';
-        
+
         // Get current geographic filters
         const selectedCountry = document.getElementById('country-select').value;
         const selectedState = document.getElementById('state-select').value;
-        
+
         // Filter stations based on geographic selections
         const filteredStations = this.availableStations.filter(station => {
             if (selectedCountry && station.country !== selectedCountry) return false;
             if (selectedState && station.state !== selectedState) return false;
             return true;
         });
-        
+
         filteredStations.forEach(station => {
             const option = document.createElement('option');
             option.value = station.id;
             option.textContent = station.name;
             option.title = `Station ID: ${station.id}`;
-            
+
             // Select station from URL if available
             if (this.urlStation && station.id === this.urlStation) {
                 option.selected = true;
             }
-            
+
             stationSelect.appendChild(option);
         });
-        
+
         // Clear the URL station after processing
         this.urlStation = null;
-        
+
         console.log(`Populated station selector with ${filteredStations.length}/${this.availableStations.length} stations`);
     }
-    
+
     async loadLocations() {
         const year = document.getElementById('year-select').value;
         const element = document.getElementById('element-select').value;
-        
+
         if (!year || !element) return;
-        
+
         try {
             // Add country parameter if selected
             const country = document.getElementById('country-select').value;
@@ -242,34 +242,34 @@ class NOAAWeatherVisualizer {
             if (country) {
                 params.append('country', country);
             }
-            
+
             const url = `/api/locations/${year}/${element}${params.toString() ? '?' + params.toString() : ''}`;
             const response = await fetch(url);
             if (!response.ok) {
                 throw new Error('Failed to fetch available locations');
             }
-            
+
             this.availableLocations = await response.json();
             this.populateLocationSelectors();
-            
+
         } catch (error) {
             console.error('Error loading available locations:', error);
             this.availableLocations = { countries: [], states: [] };
             this.populateLocationSelectors();
         }
     }
-    
+
     populateLocationSelectors() {
         // Get URL parameters for restoration
         const urlParams = new URLSearchParams(window.location.search);
         const urlCountry = urlParams.get('country');
         const urlState = urlParams.get('state');
-        
+
         // Populate country selector
         const countrySelect = document.getElementById('country-select');
         const currentCountry = countrySelect.value || urlCountry;
         countrySelect.innerHTML = '<option value="">All Countries</option>';
-        
+
         this.availableLocations.countries.forEach(country => {
             const option = document.createElement('option');
             option.value = country;
@@ -277,12 +277,12 @@ class NOAAWeatherVisualizer {
             if (country === currentCountry) option.selected = true;
             countrySelect.appendChild(option);
         });
-        
-        // Populate state selector  
+
+        // Populate state selector
         const stateSelect = document.getElementById('state-select');
         const currentState = stateSelect.value || urlState;
         stateSelect.innerHTML = '<option value="">All States/Regions</option>';
-        
+
         this.availableLocations.states.forEach(state => {
             if (state) { // Only add non-null states
                 const option = document.createElement('option');
@@ -292,52 +292,52 @@ class NOAAWeatherVisualizer {
                 stateSelect.appendChild(option);
             }
         });
-        
+
         console.log(`Populated location selectors: ${this.availableLocations.countries.length} countries, ${this.availableLocations.states.filter(s => s).length} states`);
     }
-    
+
     filterAndLoadStations() {
         // Filter stations based on geographic selections
         this.loadStations();
     }
-    
+
     restoreFiltersFromURL() {
         const urlParams = new URLSearchParams(window.location.search);
-        
+
         // Restore year
         const year = urlParams.get('year');
         if (year && this.availableYears.includes(parseInt(year))) {
             document.getElementById('year-select').value = year;
         }
-        
+
         // Restore element
         const element = urlParams.get('element');
         if (element) {
             document.getElementById('element-select').value = element;
         }
-        
+
         // Restore chart type
         const chartType = urlParams.get('chart');
         if (chartType) {
             document.getElementById('chart-type').value = chartType;
         }
-        
+
         // Restore country
         const country = urlParams.get('country');
         if (country) {
             document.getElementById('country-select').value = country;
         }
-        
+
         // Restore state
         const state = urlParams.get('state');
         if (state) {
             document.getElementById('state-select').value = state;
         }
-        
+
         // Restore station (will be set after stations are loaded)
         this.urlStation = urlParams.get('station');
     }
-    
+
     updateURLParams() {
         const year = document.getElementById('year-select').value;
         const element = document.getElementById('element-select').value;
@@ -345,7 +345,7 @@ class NOAAWeatherVisualizer {
         const country = document.getElementById('country-select').value;
         const state = document.getElementById('state-select').value;
         const station = document.getElementById('station-select').value;
-        
+
         const params = new URLSearchParams();
         if (year) params.set('year', year);
         if (element) params.set('element', element);
@@ -353,7 +353,7 @@ class NOAAWeatherVisualizer {
         if (country) params.set('country', country);
         if (state) params.set('state', state);
         if (station) params.set('station', station);
-        
+
         const newURL = `${window.location.pathname}${params.toString() ? '?' + params.toString() : ''}`;
         window.history.replaceState({}, '', newURL);
     }
@@ -445,7 +445,7 @@ class NOAAWeatherVisualizer {
             if (station) {
                 params.append('station', station);
             }
-            
+
             // Add geographic filters
             const country = document.getElementById('country-select').value;
             const state = document.getElementById('state-select').value;
@@ -455,7 +455,7 @@ class NOAAWeatherVisualizer {
             if (state) {
                 params.append('state', state);
             }
-            
+
             const response = await fetch(`/api/weather/${year}/${element}?${params}`);
             if (!response.ok) {
                 throw new Error('Failed to fetch weather data');
@@ -502,11 +502,11 @@ class NOAAWeatherVisualizer {
     visualizeData(data, chartType, element) {
         // Immediately clear all existing elements to prevent overlap
         this.g.selectAll('*').remove();
-        
+
         // Show/hide zoom instructions based on chart type
         const instructions = document.getElementById('zoom-instructions');
         instructions.style.display = chartType === 'line' ? 'block' : 'none';
-        
+
         if (!data || data.length === 0) {
             this.g.append('text')
                 .attr('x', this.width / 2)
@@ -521,20 +521,20 @@ class NOAAWeatherVisualizer {
                 .style('opacity', 1);
             return;
         }
-        
+
         // Create new chart elements
         switch (chartType) {
-            case 'line':
-                this.createLineChart(data, element);
-                break;
-            case 'bar':
-                this.createBarChart(data, element);
-                break;
-            case 'heatmap':
-                this.createHeatMap(data, element);
-                break;
+        case 'line':
+            this.createLineChart(data, element);
+            break;
+        case 'bar':
+            this.createBarChart(data, element);
+            break;
+        case 'heatmap':
+            this.createHeatMap(data, element);
+            break;
         }
-        
+
         // Fade in new elements smoothly
         this.g.selectAll('*')
             .style('opacity', 0)
@@ -566,7 +566,7 @@ class NOAAWeatherVisualizer {
             .curve(d3.curveMonotoneX);
 
         // Add x-axis
-        const xAxis = this.g.append('g')
+        this.g.append('g')
             .attr('class', 'x-axis')
             .attr('transform', `translate(0,${this.height})`)
             .call(d3.axisBottom(x).tickFormat(d3.timeFormat('%b %d')));
@@ -602,11 +602,11 @@ class NOAAWeatherVisualizer {
         const stationId = document.getElementById('station-select').value;
         const stationInfo = this.availableStations.find(s => s.id === stationId);
         const stationName = stationInfo ? stationInfo.name : stationId;
-        
-        const tooltipText = stationId ? 
+
+        const tooltipText = stationId ?
             d => `Date: ${d3.timeFormat('%Y-%m-%d')(d.date)}<br/>Station: ${stationName}<br/>${this.getValueLabel(element)}: ${d.avgValue.toFixed(2)}` :
             d => `Date: ${d3.timeFormat('%Y-%m-%d')(d.date)}<br/>Average ${this.getValueLabel(element)}: ${d.avgValue.toFixed(2)}<br/>Stations: ${d.station_count || 'N/A'}`;
-        
+
         this.addTooltip(circles, tooltipText);
 
         this.addAxesLabels('Date', this.getValueLabel(element));
@@ -648,11 +648,11 @@ class NOAAWeatherVisualizer {
         const stationId = document.getElementById('station-select').value;
         const stationInfo = this.availableStations.find(s => s.id === stationId);
         const stationName = stationInfo ? stationInfo.name : stationId;
-        
+
         const barTooltipText = stationId ?
             d => `Month: ${d.monthName}<br/>Station: ${stationName}<br/>${this.getValueLabel(element)}: ${d.avgValue.toFixed(2)}<br/>Data Points: ${d.count}` :
             d => `Month: ${d.monthName}<br/>Average ${this.getValueLabel(element)}: ${d.avgValue.toFixed(2)}<br/>Data Points: ${d.count}`;
-        
+
         this.addTooltip(bars, barTooltipText);
 
         this.addAxesLabels('Month', this.getValueLabel(element));

@@ -54,7 +54,7 @@ app.get('/api/stations/:year/:element', async (req, res) => {
                     country: row.country_name,
                     state: row.state_name
                 }));
-                
+
                 console.log(`Found ${stations.length} stations for ${year}/${element}`);
                 res.json(stations);
             }
@@ -68,7 +68,7 @@ app.get('/api/stations/:year/:element', async (req, res) => {
 app.get('/api/locations/:year/:element', async (req, res) => {
     const { year, element } = req.params;
     const country = req.query.country; // Optional country filter
-    
+
     try {
         // Get available countries and states for this year/element using lookup tables
         const query = `
@@ -106,7 +106,7 @@ app.get('/api/locations/:year/:element', async (req, res) => {
             UNION ALL
             SELECT 'state' as type, state_name as name FROM filtered_states WHERE state_name IS NOT NULL
         `;
-        
+
         connection.all(query, (err, result) => {
             if (err) {
                 console.error('Database error getting locations:', err);
@@ -114,7 +114,7 @@ app.get('/api/locations/:year/:element', async (req, res) => {
             } else {
                 const countries = new Set();
                 const states = new Set();
-                
+
                 result.forEach(row => {
                     if (row.type === 'country' && row.name) {
                         countries.add(row.name);
@@ -122,7 +122,7 @@ app.get('/api/locations/:year/:element', async (req, res) => {
                         states.add(row.name);
                     }
                 });
-                
+
                 res.json({
                     countries: Array.from(countries).sort(),
                     states: Array.from(states).sort()
@@ -137,10 +137,10 @@ app.get('/api/locations/:year/:element', async (req, res) => {
 
 app.get('/api/elements/:year', async (req, res) => {
     const { year } = req.params;
-    
+
     try {
         const yearDir = `/Users/xevix/Downloads/data/noaa/by_year/YEAR=${year}`;
-        
+
         // Check if year directory exists
         if (!fs.existsSync(yearDir)) {
             return res.status(404).json({ error: 'Year not found' });
@@ -286,7 +286,7 @@ app.get('/api/weather/:year/:element', async (req, res) => {
             LIMIT ${limit}
         `;
 
-        console.log("Query: ", query);
+        console.log('Query: ', query);
 
         connection.all(query, (err, result) => {
             if (err) {
