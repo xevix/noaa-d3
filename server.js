@@ -19,7 +19,7 @@ app.get('/', (req, res) => {
 app.get('/api/years', async (req, res) => {
     try {
         const dataDir = '/Users/xevix/Downloads/data/noaa/by_year';
-        
+
         // Read directory names and extract years
         const dirNames = fs.readdirSync(dataDir, { withFileTypes: true })
             .filter(dirent => dirent.isDirectory())
@@ -28,10 +28,10 @@ app.get('/api/years', async (req, res) => {
             .map(name => parseInt(name.split('=')[1]))
             .filter(year => !isNaN(year))
             .sort((a, b) => b - a); // Sort descending (newest first)
-        
-        console.log(`Found ${dirNames.length} years available:`, dirNames.slice(0, 10), dirNames.length > 10 ? '...' : '');
+
+        // console.log(`Found ${dirNames.length} years available:`, dirNames.slice(0, 10), dirNames.length > 10 ? '...' : '');
         res.json(dirNames);
-        
+
     } catch (error) {
         console.error('Server error getting years:', error);
         res.status(500).json({ error: 'Server error getting years' });
@@ -52,7 +52,7 @@ app.get('/api/weather/:year/:element', async (req, res) => {
                     EXTRACT(MONTH FROM STRPTIME(DATE, '%Y%m%d')) as month,
                     EXTRACT(DAY FROM STRPTIME(DATE, '%Y%m%d')) as day,
                     EXTRACT(YEAR FROM STRPTIME(DATE, '%Y%m%d')) as year
-                FROM read_parquet('/Users/xevix/Downloads/data/noaa/by_year/**/*.parquet', hive_partitioning = true)
+                FROM read_parquet('/Users/xevix/Downloads/data/noaa/by_year/YEAR=${year}/ELEMENT=${element}/*.parquet', hive_partitioning = true)
                 WHERE DATA_VALUE IS NOT NULL 
                     AND DATA_VALUE != -9999  -- Remove missing data flags
                     AND YEAR = ${year}
@@ -71,15 +71,17 @@ app.get('/api/weather/:year/:element', async (req, res) => {
             LIMIT ${limit}
         `;
 
+        console.log("Query: ", query);
+
         connection.all(query, (err, result) => {
             if (err) {
                 console.error('Database error:', err);
                 res.status(500).json({ error: 'Database query failed' });
             } else {
                 try {
-                    console.log(`Query returned ${result.length} rows`);
+                    // console.log(`Query returned ${result.length} rows`);
                     if (result.length > 0) {
-                        console.log('Sample row:', result[0]);
+                        // console.log('Sample row:', result[0]);
                     }
 
                     const processedData = result.map((row, index) => {
@@ -98,7 +100,7 @@ app.get('/api/weather/:year/:element', async (req, res) => {
                         }
                     }).filter(row => row !== null);
 
-                    console.log(`Processed ${processedData.length} rows successfully`);
+                    // console.log(`Processed ${processedData.length} rows successfully`);
                     res.json(processedData);
                 } catch (processingError) {
                     console.error('Error processing results:', processingError);
