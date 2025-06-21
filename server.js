@@ -135,6 +135,67 @@ app.get('/api/locations/:year/:element', async (req, res) => {
     }
 });
 
+app.get('/api/elements/:year', async (req, res) => {
+    const { year } = req.params;
+    
+    try {
+        const yearDir = `/Users/xevix/Downloads/data/noaa/by_year/YEAR=${year}`;
+        
+        // Check if year directory exists
+        if (!fs.existsSync(yearDir)) {
+            return res.status(404).json({ error: 'Year not found' });
+        }
+
+        // Read element directories and extract element names
+        const elementNames = fs.readdirSync(yearDir, { withFileTypes: true })
+            .filter(dirent => dirent.isDirectory())
+            .map(dirent => dirent.name)
+            .filter(name => name.startsWith('ELEMENT='))
+            .map(name => name.split('=')[1])
+            .sort();
+
+        // Get element descriptions from CSV
+        const csvPath = '/Users/xevix/Downloads/data/noaa/complete_element_descriptions.csv';
+        const query = `
+            SELECT Element, Description, Unit
+            FROM read_csv('${csvPath}', header=true)
+            WHERE Element IN (${elementNames.map(name => `'${name}'`).join(', ')})
+        `;
+
+        connection.all(query, (err, descriptions) => {
+            if (err) {
+                console.error('Error reading element descriptions:', err);
+                // Fallback to just element names
+                const elements = elementNames.map(name => ({ code: name, description: name }));
+                res.json(elements);
+            } else {
+                // Create lookup map for descriptions
+                const descMap = {};
+                descriptions.forEach(row => {
+                    descMap[row.Element] = {
+                        description: row.Description,
+                        unit: row.Unit
+                    };
+                });
+
+                // Augment elements with descriptions
+                const elements = elementNames.map(name => ({
+                    code: name,
+                    description: descMap[name] ? `${name} - ${descMap[name].description}` : name,
+                    unit: descMap[name] ? descMap[name].unit : null
+                }));
+
+                console.log(`Found ${elements.length} elements for year ${year} with descriptions`);
+                res.json(elements);
+            }
+        });
+
+    } catch (error) {
+        console.error('Server error getting elements:', error);
+        res.status(500).json({ error: 'Server error getting elements' });
+    }
+});
+
 app.get('/api/years', async (req, res) => {
     try {
         const dataDir = '/Users/xevix/Downloads/data/noaa/by_year';

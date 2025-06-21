@@ -2,6 +2,7 @@ class NOAAWeatherVisualizer {
     constructor() {
         this.currentData = null;
         this.availableYears = [];
+        this.availableElements = [];
         this.availableStations = [];
         this.availableLocations = { countries: [], states: [] };
 
@@ -29,6 +30,7 @@ class NOAAWeatherVisualizer {
 
         document.getElementById('year-select').addEventListener('change', () => {
             this.updateURLParams();
+            this.loadAvailableElements();
             this.loadLocations();
             this.loadStations();
             debouncedLoad();
@@ -64,6 +66,8 @@ class NOAAWeatherVisualizer {
         try {
             // Load available years first
             await this.loadAvailableYears();
+            // Load available elements for the selected year
+            await this.loadAvailableElements();
             // Restore filters from URL
             this.restoreFiltersFromURL();
             // Load locations and stations for default selection
@@ -114,6 +118,57 @@ class NOAAWeatherVisualizer {
         });
 
         // console.log(`Populated year selector with ${this.availableYears.length} years (${this.availableYears[this.availableYears.length-1]} - ${this.availableYears[0]})`);
+    }
+    
+    async loadAvailableElements() {
+        const year = document.getElementById('year-select').value;
+        if (!year) return;
+        
+        try {
+            const response = await fetch(`/api/elements/${year}`);
+            if (!response.ok) {
+                throw new Error('Failed to fetch available elements');
+            }
+
+            this.availableElements = await response.json();
+            this.populateElementSelector();
+
+        } catch (error) {
+            console.error('Error loading available elements:', error);
+            // Fallback to hardcoded elements if API fails
+            this.availableElements = ['TMAX', 'TMIN', 'PRCP', 'TAVG'];
+            this.populateElementSelector();
+        }
+    }
+    
+    populateElementSelector() {
+        const elementSelect = document.getElementById('element-select');
+        const currentElement = elementSelect.value;
+        elementSelect.innerHTML = ''; // Clear existing options
+
+        this.availableElements.forEach((element, index) => {
+            const option = document.createElement('option');
+            // Handle both old format (strings) and new format (objects)
+            if (typeof element === 'string') {
+                option.value = element;
+                option.textContent = element;
+            } else {
+                option.value = element.code;
+                option.textContent = element.description;
+                if (element.unit) {
+                    option.title = `Unit: ${element.unit}`;
+                }
+            }
+            
+            // Select the first element by default, or keep current if still available
+            const elementCode = typeof element === 'string' ? element : element.code;
+            if ((currentElement && elementCode === currentElement) || (!currentElement && index === 0)) {
+                option.selected = true;
+            }
+            elementSelect.appendChild(option);
+        });
+
+        console.log(`Populated element selector with ${this.availableElements.length} elements for year ${document.getElementById('year-select').value}`);
     }
     
     async loadStations() {
