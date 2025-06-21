@@ -16,18 +16,18 @@ class NOAAWeatherVisualizer {
             this.loadAndVisualizeData();
         });
 
-        // Auto-reload when filters change
-        document.getElementById('year-select').addEventListener('change', () => {
-            this.loadAndVisualizeData();
-        });
+        // Auto-reload when filters change with debouncing
+        let debounceTimer = null;
+        const debouncedLoad = () => {
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(() => {
+                this.loadAndVisualizeData();
+            }, 150); // Small delay to prevent rapid firing
+        };
 
-        document.getElementById('element-select').addEventListener('change', () => {
-            this.loadAndVisualizeData();
-        });
-
-        document.getElementById('chart-type').addEventListener('change', () => {
-            this.loadAndVisualizeData();
-        });
+        document.getElementById('year-select').addEventListener('change', debouncedLoad);
+        document.getElementById('element-select').addEventListener('change', debouncedLoad);
+        document.getElementById('chart-type').addEventListener('change', debouncedLoad);
     }
 
     async initialize() {
@@ -132,6 +132,9 @@ class NOAAWeatherVisualizer {
         const element = document.getElementById('element-select').value;
         const chartType = document.getElementById('chart-type').value;
 
+        // Clear existing chart immediately to prevent overlaps
+        this.g.selectAll('*').remove();
+
         // Show loading state
         document.getElementById('loading').style.display = 'block';
         const refreshBtn = document.getElementById('load-data');
@@ -202,12 +205,13 @@ class NOAAWeatherVisualizer {
     }
 
     visualizeData(data, chartType, element) {
+        // Immediately clear all existing elements to prevent overlap
         this.g.selectAll('*').remove();
-
+        
         // Show/hide zoom instructions based on chart type
         const instructions = document.getElementById('zoom-instructions');
         instructions.style.display = chartType === 'line' ? 'block' : 'none';
-
+        
         if (!data || data.length === 0) {
             this.g.append('text')
                 .attr('x', this.width / 2)
@@ -215,10 +219,15 @@ class NOAAWeatherVisualizer {
                 .attr('text-anchor', 'middle')
                 .text('No data available for the selected parameters')
                 .style('font-size', '16px')
-                .style('fill', '#7f8c8d');
+                .style('fill', '#7f8c8d')
+                .style('opacity', 0)
+                .transition()
+                .duration(300)
+                .style('opacity', 1);
             return;
         }
-
+        
+        // Create new chart elements
         switch (chartType) {
             case 'line':
                 this.createLineChart(data, element);
@@ -230,6 +239,13 @@ class NOAAWeatherVisualizer {
                 this.createHeatMap(data, element);
                 break;
         }
+        
+        // Fade in new elements smoothly
+        this.g.selectAll('*')
+            .style('opacity', 0)
+            .transition()
+            .duration(400)
+            .style('opacity', 1);
     }
 
     createLineChart(data, element) {
