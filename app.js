@@ -27,21 +27,31 @@ class NOAAWeatherVisualizer {
         };
 
         document.getElementById('year-select').addEventListener('change', () => {
+            this.updateURLParams();
             this.loadStations();
             debouncedLoad();
         });
         document.getElementById('element-select').addEventListener('change', () => {
+            this.updateURLParams();
             this.loadStations();
             debouncedLoad();
         });
-        document.getElementById('chart-type').addEventListener('change', debouncedLoad);
-        document.getElementById('station-select').addEventListener('change', debouncedLoad);
+        document.getElementById('chart-type').addEventListener('change', () => {
+            this.updateURLParams();
+            debouncedLoad();
+        });
+        document.getElementById('station-select').addEventListener('change', () => {
+            this.updateURLParams();
+            debouncedLoad();
+        });
     }
 
     async initialize() {
         try {
             // Load available years first
             await this.loadAvailableYears();
+            // Restore filters from URL
+            this.restoreFiltersFromURL();
             // Load stations for default selection
             await this.loadStations();
             // Then load default data
@@ -124,10 +134,59 @@ class NOAAWeatherVisualizer {
             option.textContent = station.name;
             option.title = `Station ID: ${station.id}`;
             
+            // Select station from URL if available
+            if (this.urlStation && station.id === this.urlStation) {
+                option.selected = true;
+            }
+            
             stationSelect.appendChild(option);
         });
         
+        // Clear the URL station after processing
+        this.urlStation = null;
+        
         console.log(`Populated station selector with ${this.availableStations.length} stations`);
+    }
+    
+    restoreFiltersFromURL() {
+        const urlParams = new URLSearchParams(window.location.search);
+        
+        // Restore year
+        const year = urlParams.get('year');
+        if (year && this.availableYears.includes(parseInt(year))) {
+            document.getElementById('year-select').value = year;
+        }
+        
+        // Restore element
+        const element = urlParams.get('element');
+        if (element) {
+            document.getElementById('element-select').value = element;
+        }
+        
+        // Restore chart type
+        const chartType = urlParams.get('chart');
+        if (chartType) {
+            document.getElementById('chart-type').value = chartType;
+        }
+        
+        // Restore station (will be set after stations are loaded)
+        this.urlStation = urlParams.get('station');
+    }
+    
+    updateURLParams() {
+        const year = document.getElementById('year-select').value;
+        const element = document.getElementById('element-select').value;
+        const chartType = document.getElementById('chart-type').value;
+        const station = document.getElementById('station-select').value;
+        
+        const params = new URLSearchParams();
+        if (year) params.set('year', year);
+        if (element) params.set('element', element);
+        if (chartType) params.set('chart', chartType);
+        if (station) params.set('station', station);
+        
+        const newURL = `${window.location.pathname}${params.toString() ? '?' + params.toString() : ''}`;
+        window.history.replaceState({}, '', newURL);
     }
 
     async loadDefaultData() {
@@ -135,6 +194,8 @@ class NOAAWeatherVisualizer {
         try {
             document.getElementById('loading').style.display = 'block';
             await this.loadAndVisualizeData();
+            // Update URL with current filter state
+            this.updateURLParams();
         } catch (error) {
             console.error('Error loading default data:', error);
             this.showErrorMessage('Click "🔄 Refresh" to load weather data');
