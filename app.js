@@ -45,6 +45,7 @@ class NOAAWeatherVisualizer {
         });
         document.getElementById('country-select').addEventListener('change', () => {
             this.updateURLParams();
+            this.loadLocations(); // Reload locations to update state dropdown
             this.filterAndLoadStations();
             debouncedLoad();
         });
@@ -180,7 +181,15 @@ class NOAAWeatherVisualizer {
         if (!year || !element) return;
         
         try {
-            const response = await fetch(`/api/locations/${year}/${element}`);
+            // Add country parameter if selected
+            const country = document.getElementById('country-select').value;
+            const params = new URLSearchParams();
+            if (country) {
+                params.append('country', country);
+            }
+            
+            const url = `/api/locations/${year}/${element}${params.toString() ? '?' + params.toString() : ''}`;
+            const response = await fetch(url);
             if (!response.ok) {
                 throw new Error('Failed to fetch available locations');
             }
@@ -196,9 +205,14 @@ class NOAAWeatherVisualizer {
     }
     
     populateLocationSelectors() {
+        // Get URL parameters for restoration
+        const urlParams = new URLSearchParams(window.location.search);
+        const urlCountry = urlParams.get('country');
+        const urlState = urlParams.get('state');
+        
         // Populate country selector
         const countrySelect = document.getElementById('country-select');
-        const currentCountry = countrySelect.value;
+        const currentCountry = countrySelect.value || urlCountry;
         countrySelect.innerHTML = '<option value="">All Countries</option>';
         
         this.availableLocations.countries.forEach(country => {
@@ -211,18 +225,20 @@ class NOAAWeatherVisualizer {
         
         // Populate state selector  
         const stateSelect = document.getElementById('state-select');
-        const currentState = stateSelect.value;
+        const currentState = stateSelect.value || urlState;
         stateSelect.innerHTML = '<option value="">All States/Regions</option>';
         
         this.availableLocations.states.forEach(state => {
-            const option = document.createElement('option');
-            option.value = state;
-            option.textContent = state;
-            if (state === currentState) option.selected = true;
-            stateSelect.appendChild(option);
+            if (state) { // Only add non-null states
+                const option = document.createElement('option');
+                option.value = state;
+                option.textContent = state;
+                if (state === currentState) option.selected = true;
+                stateSelect.appendChild(option);
+            }
         });
         
-        console.log(`Populated location selectors: ${this.availableLocations.countries.length} countries, ${this.availableLocations.states.length} states`);
+        console.log(`Populated location selectors: ${this.availableLocations.countries.length} countries, ${this.availableLocations.states.filter(s => s).length} states`);
     }
     
     filterAndLoadStations() {

@@ -67,6 +67,7 @@ app.get('/api/stations/:year/:element', async (req, res) => {
 
 app.get('/api/locations/:year/:element', async (req, res) => {
     const { year, element } = req.params;
+    const country = req.query.country; // Optional country filter
     
     try {
         // Get available countries and states for this year/element using lookup tables
@@ -75,18 +76,27 @@ app.get('/api/locations/:year/:element', async (req, res) => {
                 SELECT DISTINCT ID as station_id
                 FROM read_parquet('/Users/xevix/Downloads/data/noaa/by_year/YEAR=${year}/ELEMENT=${element}/*.parquet')
                 WHERE ID IS NOT NULL
+            ),
+            station_locations AS (
+                SELECT 
+                    s.station_id,
+                    c.name as country_name,
+                    states.name as state_name
+                FROM available_stations s
+                LEFT JOIN read_parquet('/Users/xevix/Downloads/data/noaa/ghcnd-stations.parquet') st
+                    ON s.station_id = st.id
+                LEFT JOIN read_parquet('/Users/xevix/Downloads/data/noaa/ghcnd-countries.parquet') c
+                    ON SUBSTRING(s.station_id, 1, 2) = c.s
+                LEFT JOIN read_parquet('/Users/xevix/Downloads/data/noaa/ghcnd-states.parquet') states
+                    ON st.st = states.st
+                WHERE c.name IS NOT NULL
             )
             SELECT DISTINCT
-                c.name as country_name,
-                states.name as state_name
-            FROM available_stations s
-            LEFT JOIN read_parquet('/Users/xevix/Downloads/data/noaa/ghcnd-stations.parquet') st
-                ON s.station_id = st.id
-            LEFT JOIN read_parquet('/Users/xevix/Downloads/data/noaa/ghcnd-countries.parquet') c
-                ON SUBSTRING(s.station_id, 1, 2) = c.s
-            LEFT JOIN read_parquet('/Users/xevix/Downloads/data/noaa/ghcnd-states.parquet') states
-                ON st.st = states.st
-            WHERE c.name IS NOT NULL OR states.name IS NOT NULL
+                country_name,
+                state_name
+            FROM station_locations
+            WHERE country_name IS NOT NULL
+            ${country ? `AND country_name = '${country}'` : ''}
         `;
         
         connection.all(query, (err, result) => {
