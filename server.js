@@ -90,13 +90,21 @@ app.get('/api/locations/:year/:element', async (req, res) => {
                 LEFT JOIN read_parquet('/Users/xevix/Downloads/data/noaa/ghcnd-states.parquet') states
                     ON st.st = states.st
                 WHERE c.name IS NOT NULL
+            ),
+            all_countries AS (
+                SELECT DISTINCT country_name
+                FROM station_locations
+                WHERE country_name IS NOT NULL
+            ),
+            filtered_states AS (
+                SELECT DISTINCT state_name
+                FROM station_locations
+                WHERE country_name IS NOT NULL
+                ${country ? `AND country_name = '${country}'` : ''}
             )
-            SELECT DISTINCT
-                country_name,
-                state_name
-            FROM station_locations
-            WHERE country_name IS NOT NULL
-            ${country ? `AND country_name = '${country}'` : ''}
+            SELECT 'country' as type, country_name as name FROM all_countries
+            UNION ALL
+            SELECT 'state' as type, state_name as name FROM filtered_states WHERE state_name IS NOT NULL
         `;
         
         connection.all(query, (err, result) => {
@@ -108,8 +116,11 @@ app.get('/api/locations/:year/:element', async (req, res) => {
                 const states = new Set();
                 
                 result.forEach(row => {
-                    if (row.country_name) countries.add(row.country_name);
-                    if (row.state_name) states.add(row.state_name);
+                    if (row.type === 'country' && row.name) {
+                        countries.add(row.name);
+                    } else if (row.type === 'state' && row.name) {
+                        states.add(row.name);
+                    }
                 });
                 
                 res.json({
