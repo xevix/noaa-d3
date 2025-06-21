@@ -16,6 +16,45 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
+app.get('/api/stations/:year/:element', async (req, res) => {
+    const { year, element } = req.params;
+
+    try {
+        const query = `
+            WITH available_stations AS (
+                SELECT DISTINCT ID as station_id
+                FROM read_parquet('/Users/xevix/Downloads/data/noaa/by_year/YEAR=${year}/ELEMENT=${element}/*.parquet')
+                WHERE ID IS NOT NULL
+            )
+            SELECT 
+                s.station_id,
+                COALESCE(st.NAME, s.station_id) as station_name
+            FROM available_stations s
+            LEFT JOIN read_parquet('/Users/xevix/Downloads/data/noaa/ghcnd-stations.parquet') st
+                ON s.station_id = st.ID
+            ORDER BY station_name
+            LIMIT 1000
+        `;
+
+        connection.all(query, (err, result) => {
+            if (err) {
+                console.error('Database error getting stations:', err);
+                res.status(500).json({ error: 'Failed to get available stations' });
+            } else {
+                const stations = result.map(row => ({
+                    id: String(row.station_id),
+                    name: String(row.station_name || row.station_id)
+                }));
+                console.log(`Found ${stations.length} stations for ${year}/${element}`);
+                res.json(stations);
+            }
+        });
+    } catch (error) {
+        console.error('Server error getting stations:', error);
+        res.status(500).json({ error: 'Server error getting stations' });
+    }
+});
+
 app.get('/api/years', async (req, res) => {
     try {
         const dataDir = '/Users/xevix/Downloads/data/noaa/by_year';
@@ -41,9 +80,30 @@ app.get('/api/years', async (req, res) => {
 app.get('/api/weather/:year/:element', async (req, res) => {
     const { year, element } = req.params;
     const limit = req.query.limit || 5000;
+    const station = req.query.station; // Optional station filter
 
     try {
-        const query = `
+        const stationFilter = station ? `AND ID = '${station}'` : '';
+        const stationLabel = station ? 'station data' : 'avg_value as value, COUNT(*) as station_count';
+        const selectFields = station ?
+            'DATE as date, CAST(DATA_VALUE AS DOUBLE) / 10.0 as value, 1 as station_count' :
+            'DATE as date, AVG(CAST(DATA_VALUE AS DOUBLE)) as avg_value, COUNT(*) as station_count';
+
+        const query = station ? `
+            SELECT 
+                DATE as date,
+                CAST(DATA_VALUE AS DOUBLE) as value,
+                1 as station_count,
+                EXTRACT(MONTH FROM STRPTIME(DATE, '%Y%m%d')) as month,
+                EXTRACT(DAY FROM STRPTIME(DATE, '%Y%m%d')) as day,
+                EXTRACT(YEAR FROM STRPTIME(DATE, '%Y%m%d')) as year
+            FROM read_parquet('/Users/xevix/Downloads/data/noaa/by_year/YEAR=${year}/ELEMENT=${element}/*.parquet')
+            WHERE DATA_VALUE IS NOT NULL 
+                AND DATA_VALUE != -9999
+                AND ID = '${station}'
+            ORDER BY DATE
+            LIMIT ${limit}
+        ` : `
             WITH daily_averages AS (
                 SELECT 
                     DATE as date,
@@ -52,11 +112,9 @@ app.get('/api/weather/:year/:element', async (req, res) => {
                     EXTRACT(MONTH FROM STRPTIME(DATE, '%Y%m%d')) as month,
                     EXTRACT(DAY FROM STRPTIME(DATE, '%Y%m%d')) as day,
                     EXTRACT(YEAR FROM STRPTIME(DATE, '%Y%m%d')) as year
-                FROM read_parquet('/Users/xevix/Downloads/data/noaa/by_year/YEAR=${year}/ELEMENT=${element}/*.parquet', hive_partitioning = true)
+                FROM read_parquet('/Users/xevix/Downloads/data/noaa/by_year/YEAR=${year}/ELEMENT=${element}/*.parquet')
                 WHERE DATA_VALUE IS NOT NULL 
-                    AND DATA_VALUE != -9999  -- Remove missing data flags
-                    AND YEAR = ${year}
-                    AND ELEMENT = '${element}'
+                    AND DATA_VALUE != -9999
                 GROUP BY DATE
                 ORDER BY DATE
             )

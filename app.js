@@ -2,6 +2,7 @@ class NOAAWeatherVisualizer {
     constructor() {
         this.currentData = null;
         this.availableYears = [];
+        this.availableStations = [];
 
         this.initializeEventListeners();
         this.setupChart();
@@ -25,15 +26,24 @@ class NOAAWeatherVisualizer {
             }, 150); // Small delay to prevent rapid firing
         };
 
-        document.getElementById('year-select').addEventListener('change', debouncedLoad);
-        document.getElementById('element-select').addEventListener('change', debouncedLoad);
+        document.getElementById('year-select').addEventListener('change', () => {
+            this.loadStations();
+            debouncedLoad();
+        });
+        document.getElementById('element-select').addEventListener('change', () => {
+            this.loadStations();
+            debouncedLoad();
+        });
         document.getElementById('chart-type').addEventListener('change', debouncedLoad);
+        document.getElementById('station-select').addEventListener('change', debouncedLoad);
     }
 
     async initialize() {
         try {
             // Load available years first
             await this.loadAvailableYears();
+            // Load stations for default selection
+            await this.loadStations();
             // Then load default data
             await this.loadDefaultData();
         } catch (error) {
@@ -79,6 +89,45 @@ class NOAAWeatherVisualizer {
         });
 
         // console.log(`Populated year selector with ${this.availableYears.length} years (${this.availableYears[this.availableYears.length-1]} - ${this.availableYears[0]})`);
+    }
+    
+    async loadStations() {
+        const year = document.getElementById('year-select').value;
+        const element = document.getElementById('element-select').value;
+        
+        if (!year || !element) return;
+        
+        try {
+            const response = await fetch(`/api/stations/${year}/${element}`);
+            if (!response.ok) {
+                throw new Error('Failed to fetch available stations');
+            }
+            
+            this.availableStations = await response.json();
+            this.populateStationSelector();
+            
+        } catch (error) {
+            console.error('Error loading available stations:', error);
+            // Clear stations on error
+            this.availableStations = [];
+            this.populateStationSelector();
+        }
+    }
+    
+    populateStationSelector() {
+        const stationSelect = document.getElementById('station-select');
+        stationSelect.innerHTML = '<option value="">All Stations (Average)</option>';
+        
+        this.availableStations.forEach(station => {
+            const option = document.createElement('option');
+            option.value = station.id;
+            option.textContent = station.name;
+            option.title = `Station ID: ${station.id}`;
+            
+            stationSelect.appendChild(option);
+        });
+        
+        console.log(`Populated station selector with ${this.availableStations.length} stations`);
     }
 
     async loadDefaultData() {
@@ -131,6 +180,7 @@ class NOAAWeatherVisualizer {
         const year = document.getElementById('year-select').value;
         const element = document.getElementById('element-select').value;
         const chartType = document.getElementById('chart-type').value;
+        const station = document.getElementById('station-select').value;
 
         // Clear existing chart immediately to prevent overlaps
         this.g.selectAll('*').remove();
@@ -143,7 +193,7 @@ class NOAAWeatherVisualizer {
         refreshBtn.disabled = true;
 
         try {
-            const data = await this.queryWeatherData(year, element);
+            const data = await this.queryWeatherData(year, element, station);
             this.currentData = data;
             this.originalData = [...data]; // Store original data for zoom reset
             this.zoomExtent = null; // Reset zoom
@@ -159,9 +209,14 @@ class NOAAWeatherVisualizer {
         }
     }
 
-    async queryWeatherData(year, element) {
+    async queryWeatherData(year, element, station = null) {
         try {
-            const response = await fetch(`/api/weather/${year}/${element}?limit=5000`);
+            const params = new URLSearchParams({ limit: 5000 });
+            if (station) {
+                params.append('station', station);
+            }
+            
+            const response = await fetch(`/api/weather/${year}/${element}?${params}`);
             if (!response.ok) {
                 throw new Error('Failed to fetch weather data');
             }
@@ -304,7 +359,15 @@ class NOAAWeatherVisualizer {
             .attr('fill', '#3498db')
             .style('pointer-events', 'all'); // Ensure they can receive mouse events
 
-        this.addTooltip(circles, d => `Date: ${d3.timeFormat('%Y-%m-%d')(d.date)}<br/>Average ${this.getValueLabel(element)}: ${d.avgValue.toFixed(2)}<br/>Stations: ${d.station_count || 'N/A'}`);
+        const stationId = document.getElementById('station-select').value;
+        const stationInfo = this.availableStations.find(s => s.id === stationId);
+        const stationName = stationInfo ? stationInfo.name : stationId;
+        
+        const tooltipText = stationId ? 
+            d => `Date: ${d3.timeFormat('%Y-%m-%d')(d.date)}<br/>Station: ${stationName}<br/>${this.getValueLabel(element)}: ${d.avgValue.toFixed(2)}` :
+            d => `Date: ${d3.timeFormat('%Y-%m-%d')(d.date)}<br/>Average ${this.getValueLabel(element)}: ${d.avgValue.toFixed(2)}<br/>Stations: ${d.station_count || 'N/A'}`;
+        
+        this.addTooltip(circles, tooltipText);
 
         this.addAxesLabels('Date', this.getValueLabel(element));
 
@@ -342,7 +405,15 @@ class NOAAWeatherVisualizer {
             .attr('height', d => this.height - y(d.avgValue))
             .attr('fill', '#e74c3c');
 
-        this.addTooltip(bars, d => `Month: ${d.monthName}<br/>Average ${this.getValueLabel(element)}: ${d.avgValue.toFixed(2)}<br/>Data Points: ${d.count}`);
+        const stationId = document.getElementById('station-select').value;
+        const stationInfo = this.availableStations.find(s => s.id === stationId);
+        const stationName = stationInfo ? stationInfo.name : stationId;
+        
+        const barTooltipText = stationId ?
+            d => `Month: ${d.monthName}<br/>Station: ${stationName}<br/>${this.getValueLabel(element)}: ${d.avgValue.toFixed(2)}<br/>Data Points: ${d.count}` :
+            d => `Month: ${d.monthName}<br/>Average ${this.getValueLabel(element)}: ${d.avgValue.toFixed(2)}<br/>Data Points: ${d.count}`;
+        
+        this.addTooltip(bars, barTooltipText);
 
         this.addAxesLabels('Month', this.getValueLabel(element));
     }
