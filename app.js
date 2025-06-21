@@ -3,6 +3,7 @@ class NOAAWeatherVisualizer {
         this.currentData = null;
         this.availableYears = [];
         this.availableStations = [];
+        this.availableLocations = { countries: [], states: [] };
 
         this.initializeEventListeners();
         this.setupChart();
@@ -28,16 +29,28 @@ class NOAAWeatherVisualizer {
 
         document.getElementById('year-select').addEventListener('change', () => {
             this.updateURLParams();
+            this.loadLocations();
             this.loadStations();
             debouncedLoad();
         });
         document.getElementById('element-select').addEventListener('change', () => {
             this.updateURLParams();
+            this.loadLocations();
             this.loadStations();
             debouncedLoad();
         });
         document.getElementById('chart-type').addEventListener('change', () => {
             this.updateURLParams();
+            debouncedLoad();
+        });
+        document.getElementById('country-select').addEventListener('change', () => {
+            this.updateURLParams();
+            this.filterAndLoadStations();
+            debouncedLoad();
+        });
+        document.getElementById('state-select').addEventListener('change', () => {
+            this.updateURLParams();
+            this.filterAndLoadStations();
             debouncedLoad();
         });
         document.getElementById('station-select').addEventListener('change', () => {
@@ -52,7 +65,8 @@ class NOAAWeatherVisualizer {
             await this.loadAvailableYears();
             // Restore filters from URL
             this.restoreFiltersFromURL();
-            // Load stations for default selection
+            // Load locations and stations for default selection
+            await this.loadLocations();
             await this.loadStations();
             // Then load default data
             await this.loadDefaultData();
@@ -128,7 +142,18 @@ class NOAAWeatherVisualizer {
         const stationSelect = document.getElementById('station-select');
         stationSelect.innerHTML = '<option value="">All Stations (Average)</option>';
         
-        this.availableStations.forEach(station => {
+        // Get current geographic filters
+        const selectedCountry = document.getElementById('country-select').value;
+        const selectedState = document.getElementById('state-select').value;
+        
+        // Filter stations based on geographic selections
+        const filteredStations = this.availableStations.filter(station => {
+            if (selectedCountry && station.country !== selectedCountry) return false;
+            if (selectedState && station.state !== selectedState) return false;
+            return true;
+        });
+        
+        filteredStations.forEach(station => {
             const option = document.createElement('option');
             option.value = station.id;
             option.textContent = station.name;
@@ -145,7 +170,64 @@ class NOAAWeatherVisualizer {
         // Clear the URL station after processing
         this.urlStation = null;
         
-        console.log(`Populated station selector with ${this.availableStations.length} stations`);
+        console.log(`Populated station selector with ${filteredStations.length}/${this.availableStations.length} stations`);
+    }
+    
+    async loadLocations() {
+        const year = document.getElementById('year-select').value;
+        const element = document.getElementById('element-select').value;
+        
+        if (!year || !element) return;
+        
+        try {
+            const response = await fetch(`/api/locations/${year}/${element}`);
+            if (!response.ok) {
+                throw new Error('Failed to fetch available locations');
+            }
+            
+            this.availableLocations = await response.json();
+            this.populateLocationSelectors();
+            
+        } catch (error) {
+            console.error('Error loading available locations:', error);
+            this.availableLocations = { countries: [], states: [] };
+            this.populateLocationSelectors();
+        }
+    }
+    
+    populateLocationSelectors() {
+        // Populate country selector
+        const countrySelect = document.getElementById('country-select');
+        const currentCountry = countrySelect.value;
+        countrySelect.innerHTML = '<option value="">All Countries</option>';
+        
+        this.availableLocations.countries.forEach(country => {
+            const option = document.createElement('option');
+            option.value = country;
+            option.textContent = country;
+            if (country === currentCountry) option.selected = true;
+            countrySelect.appendChild(option);
+        });
+        
+        // Populate state selector  
+        const stateSelect = document.getElementById('state-select');
+        const currentState = stateSelect.value;
+        stateSelect.innerHTML = '<option value="">All States/Regions</option>';
+        
+        this.availableLocations.states.forEach(state => {
+            const option = document.createElement('option');
+            option.value = state;
+            option.textContent = state;
+            if (state === currentState) option.selected = true;
+            stateSelect.appendChild(option);
+        });
+        
+        console.log(`Populated location selectors: ${this.availableLocations.countries.length} countries, ${this.availableLocations.states.length} states`);
+    }
+    
+    filterAndLoadStations() {
+        // Filter stations based on geographic selections
+        this.loadStations();
     }
     
     restoreFiltersFromURL() {
@@ -169,6 +251,18 @@ class NOAAWeatherVisualizer {
             document.getElementById('chart-type').value = chartType;
         }
         
+        // Restore country
+        const country = urlParams.get('country');
+        if (country) {
+            document.getElementById('country-select').value = country;
+        }
+        
+        // Restore state
+        const state = urlParams.get('state');
+        if (state) {
+            document.getElementById('state-select').value = state;
+        }
+        
         // Restore station (will be set after stations are loaded)
         this.urlStation = urlParams.get('station');
     }
@@ -177,12 +271,16 @@ class NOAAWeatherVisualizer {
         const year = document.getElementById('year-select').value;
         const element = document.getElementById('element-select').value;
         const chartType = document.getElementById('chart-type').value;
+        const country = document.getElementById('country-select').value;
+        const state = document.getElementById('state-select').value;
         const station = document.getElementById('station-select').value;
         
         const params = new URLSearchParams();
         if (year) params.set('year', year);
         if (element) params.set('element', element);
         if (chartType) params.set('chart', chartType);
+        if (country) params.set('country', country);
+        if (state) params.set('state', state);
         if (station) params.set('station', station);
         
         const newURL = `${window.location.pathname}${params.toString() ? '?' + params.toString() : ''}`;
@@ -275,6 +373,16 @@ class NOAAWeatherVisualizer {
             const params = new URLSearchParams({ limit: 5000 });
             if (station) {
                 params.append('station', station);
+            }
+            
+            // Add geographic filters
+            const country = document.getElementById('country-select').value;
+            const state = document.getElementById('state-select').value;
+            if (country) {
+                params.append('country', country);
+            }
+            if (state) {
+                params.append('state', state);
             }
             
             const response = await fetch(`/api/weather/${year}/${element}?${params}`);

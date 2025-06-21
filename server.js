@@ -28,10 +28,17 @@ app.get('/api/stations/:year/:element', async (req, res) => {
             )
             SELECT 
                 s.station_id,
-                COALESCE(st.NAME, s.station_id) as station_name
+                COALESCE(st.name, s.station_id) as station_name,
+                c.name as country_name,
+                states.name as state_name
             FROM available_stations s
             LEFT JOIN read_parquet('/Users/xevix/Downloads/data/noaa/ghcnd-stations.parquet') st
-                ON s.station_id = st.ID
+                ON s.station_id = st.id
+            LEFT JOIN read_parquet('/Users/xevix/Downloads/data/noaa/ghcnd-countries.parquet') c
+                ON SUBSTRING(s.station_id, 1, 2) = c.s
+            LEFT JOIN read_parquet('/Users/xevix/Downloads/data/noaa/ghcnd-states.parquet') states
+                ON st.st = states.st
+            WHERE st.name IS NOT NULL
             ORDER BY station_name
             LIMIT 1000
         `;
@@ -43,8 +50,11 @@ app.get('/api/stations/:year/:element', async (req, res) => {
             } else {
                 const stations = result.map(row => ({
                     id: String(row.station_id),
-                    name: String(row.station_name || row.station_id)
+                    name: String(row.station_name || row.station_id),
+                    country: row.country_name,
+                    state: row.state_name
                 }));
+                
                 console.log(`Found ${stations.length} stations for ${year}/${element}`);
                 res.json(stations);
             }
@@ -52,6 +62,55 @@ app.get('/api/stations/:year/:element', async (req, res) => {
     } catch (error) {
         console.error('Server error getting stations:', error);
         res.status(500).json({ error: 'Server error getting stations' });
+    }
+});
+
+app.get('/api/locations/:year/:element', async (req, res) => {
+    const { year, element } = req.params;
+    
+    try {
+        // Get available countries and states for this year/element using lookup tables
+        const query = `
+            WITH available_stations AS (
+                SELECT DISTINCT ID as station_id
+                FROM read_parquet('/Users/xevix/Downloads/data/noaa/by_year/YEAR=${year}/ELEMENT=${element}/*.parquet')
+                WHERE ID IS NOT NULL
+            )
+            SELECT DISTINCT
+                c.name as country_name,
+                states.name as state_name
+            FROM available_stations s
+            LEFT JOIN read_parquet('/Users/xevix/Downloads/data/noaa/ghcnd-stations.parquet') st
+                ON s.station_id = st.id
+            LEFT JOIN read_parquet('/Users/xevix/Downloads/data/noaa/ghcnd-countries.parquet') c
+                ON SUBSTRING(s.station_id, 1, 2) = c.s
+            LEFT JOIN read_parquet('/Users/xevix/Downloads/data/noaa/ghcnd-states.parquet') states
+                ON st.st = states.st
+            WHERE c.name IS NOT NULL OR states.name IS NOT NULL
+        `;
+        
+        connection.all(query, (err, result) => {
+            if (err) {
+                console.error('Database error getting locations:', err);
+                res.status(500).json({ error: 'Failed to get available locations' });
+            } else {
+                const countries = new Set();
+                const states = new Set();
+                
+                result.forEach(row => {
+                    if (row.country_name) countries.add(row.country_name);
+                    if (row.state_name) states.add(row.state_name);
+                });
+                
+                res.json({
+                    countries: Array.from(countries).sort(),
+                    states: Array.from(states).sort()
+                });
+            }
+        });
+    } catch (error) {
+        console.error('Server error getting locations:', error);
+        res.status(500).json({ error: 'Server error getting locations' });
     }
 });
 
@@ -81,13 +140,27 @@ app.get('/api/weather/:year/:element', async (req, res) => {
     const { year, element } = req.params;
     const limit = req.query.limit || 5000;
     const station = req.query.station; // Optional station filter
+    const country = req.query.country; // Optional country filter
+    const state = req.query.state; // Optional state filter
 
     try {
-        const stationFilter = station ? `AND ID = '${station}'` : '';
-        const stationLabel = station ? 'station data' : 'avg_value as value, COUNT(*) as station_count';
-        const selectFields = station ?
-            'DATE as date, CAST(DATA_VALUE AS DOUBLE) / 10.0 as value, 1 as station_count' :
-            'DATE as date, AVG(CAST(DATA_VALUE AS DOUBLE)) as avg_value, COUNT(*) as station_count';
+        // Build geographic filter if needed
+        let geoFilter = '';
+        if (country || state) {
+            geoFilter = `
+                AND ID IN (
+                    SELECT st.id 
+                    FROM read_parquet('/Users/xevix/Downloads/data/noaa/ghcnd-stations.parquet') st
+                    LEFT JOIN read_parquet('/Users/xevix/Downloads/data/noaa/ghcnd-countries.parquet') c
+                        ON SUBSTRING(st.id, 1, 2) = c.s
+                    LEFT JOIN read_parquet('/Users/xevix/Downloads/data/noaa/ghcnd-states.parquet') states
+                        ON st.st = states.st
+                    WHERE 1=1
+                    ${country ? `AND c.name = '${country}'` : ''}
+                    ${state ? `AND states.name = '${state}'` : ''}
+                )
+            `;
+        }
 
         const query = station ? `
             SELECT 
@@ -101,6 +174,7 @@ app.get('/api/weather/:year/:element', async (req, res) => {
             WHERE DATA_VALUE IS NOT NULL 
                 AND DATA_VALUE != -9999
                 AND ID = '${station}'
+                ${geoFilter}
             ORDER BY DATE
             LIMIT ${limit}
         ` : `
@@ -115,6 +189,7 @@ app.get('/api/weather/:year/:element', async (req, res) => {
                 FROM read_parquet('/Users/xevix/Downloads/data/noaa/by_year/YEAR=${year}/ELEMENT=${element}/*.parquet')
                 WHERE DATA_VALUE IS NOT NULL 
                     AND DATA_VALUE != -9999
+                    ${geoFilter}
                 GROUP BY DATE
                 ORDER BY DATE
             )
