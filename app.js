@@ -5,6 +5,7 @@ class NOAAWeatherVisualizer {
         this.availableElements = [];
         this.availableStations = [];
         this.availableLocations = { countries: [], states: [] };
+        this.isBrushing = false;
 
         this.initializeEventListeners();
         this.setupChart();
@@ -404,6 +405,7 @@ class NOAAWeatherVisualizer {
         // Initialize zoom state
         this.zoomExtent = null;
         this.originalData = null;
+        this.heatmapZoom = null;
     }
 
     async loadAndVisualizeData() {
@@ -426,7 +428,8 @@ class NOAAWeatherVisualizer {
             const data = await this.queryWeatherData(year, element, station);
             this.currentData = data;
             this.originalData = [...data]; // Store original data for zoom reset
-            this.zoomExtent = null; // Reset zoom
+            this.zoomExtent = null; // Reset line chart zoom
+            this.heatmapZoom = null; // Reset heatmap zoom
             this.visualizeData(data, chartType, element);
         } catch (error) {
             console.error('Error loading data:', error);
@@ -505,7 +508,15 @@ class NOAAWeatherVisualizer {
 
         // Show/hide zoom instructions based on chart type
         const instructions = document.getElementById('zoom-instructions');
-        instructions.style.display = chartType === 'line' ? 'block' : 'none';
+        if (chartType === 'line') {
+            instructions.style.display = 'block';
+            instructions.textContent = 'Drag to select a time range to zoom in';
+        } else if (chartType === 'heatmap') {
+            instructions.style.display = 'block';
+            instructions.textContent = 'Drag to select a region to zoom into a specific time period';
+        } else {
+            instructions.style.display = 'none';
+        }
 
         if (!data || data.length === 0) {
             this.g.append('text')
@@ -615,6 +626,139 @@ class NOAAWeatherVisualizer {
         this.addZoomControls(element);
     }
 
+    addHeatmapBrush(xScale, yScale, monthNames, originalData, element, heatmapData) {
+        const brush = d3.brush()
+            .extent([[0, 0], [this.width, this.height]]);
+
+        const brushGroup = this.g.append('g')
+            .attr('class', 'heatmap-brush')
+            .call(brush);
+
+        // Style the brush overlay to allow both brushing and tooltips
+        brushGroup.selectAll('.overlay')
+            .style('pointer-events', 'all')
+            .style('fill', 'transparent')
+            .style('cursor', 'crosshair');
+
+        brushGroup.selectAll('.selection')
+            .style('fill', 'rgba(0, 123, 255, 0.2)')
+            .style('stroke', '#007bff')
+            .style('stroke-width', 2);
+
+        brushGroup
+            .on('mousemove', (event) => {
+                if (this.isBrushing) return;
+
+                const [mx, my] = d3.pointer(event);
+                const dayDomain = xScale.domain();
+                const monthDomain = yScale.domain();
+
+                const dayIndex = Math.floor(mx / xScale.step());
+                const monthIndex = Math.floor(my / yScale.step());
+
+                if (dayIndex < 0 || dayIndex >= dayDomain.length || monthIndex < 0 || monthIndex >= monthDomain.length) {
+                    this.tooltip.style('opacity', 0);
+                    return;
+                }
+
+                const day = dayDomain[dayIndex];
+                const monthName = monthDomain[monthIndex];
+                const month = monthNames.indexOf(monthName) + 1;
+                
+                const d = heatmapData.find(p => p.day === day && p.month === month);
+
+                if (d) {
+                    this.tooltip
+                        .style('opacity', 1)
+                        .html(`${monthName} ${d.day}<br/>${this.getValueLabel(element)}: ${d.value ? d.value.toFixed(2) : 'No data'}`)
+                        .style('left', (event.pageX + 10) + 'px')
+                        .style('top', (event.pageY - 10) + 'px');
+                } else {
+                    this.tooltip.style('opacity', 0);
+                }
+            })
+            .on('mouseout', () => {
+                this.tooltip.style('opacity', 0);
+            });
+
+        brush.on('start', () => {
+            this.isBrushing = true;
+            this.tooltip.style('opacity', 0);
+        });
+
+        brush.on('end', (event) => {
+            this.isBrushing = false;
+
+            if (!event.selection) return;
+
+            const [[x0, y0], [x1, y1]] = event.selection;
+
+            // Convert pixel coordinates to day/month values using scaleBand domain
+            const dayDomain = xScale.domain();
+            const monthDomain = yScale.domain();
+
+            const startDayIndex = Math.max(0, Math.floor(x0 / xScale.step()));
+            const endDayIndex = Math.min(dayDomain.length - 1, Math.floor(x1 / xScale.step()));
+            const startMonthIndex = Math.max(0, Math.floor(y0 / yScale.step()));
+            const endMonthIndex = Math.min(monthDomain.length - 1, Math.floor(y1 / yScale.step()));
+
+            const startDay = dayDomain[startDayIndex];
+            const endDay = dayDomain[endDayIndex];
+            const startMonthName = monthDomain[startMonthIndex];
+            const endMonthName = monthDomain[endMonthIndex];
+
+            // Convert month names to month numbers (1-12)
+            const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            const startMonth = monthNames.indexOf(startMonthName) + 1;
+            const endMonth = monthNames.indexOf(endMonthName) + 1;
+
+            // Store zoom state
+            this.heatmapZoom = {
+                startDay,
+                endDay,
+                startMonth,
+                endMonth
+            };
+
+            // Clear the brush selection
+            this.g.select('.heatmap-brush').call(brush.move, null);
+
+            // Re-render the heatmap with the new zoom extent
+            this.g.selectAll('*').remove();
+            this.createHeatMap(originalData, element);
+        });
+    }
+
+    addHeatmapZoomControls(originalData, element) {
+        // Add zoom reset button if zoomed
+        if (this.heatmapZoom) {
+            const resetButton = this.g.append('g')
+                .attr('class', 'heatmap-zoom-reset')
+                .attr('transform', `translate(${this.width - 80}, 10)`)
+                .style('cursor', 'pointer')
+                .on('click', () => {
+                    this.heatmapZoom = null;
+                    this.g.selectAll('*').remove();
+                    this.createHeatMap(originalData, element);
+                });
+
+            resetButton.append('rect')
+                .attr('width', 70)
+                .attr('height', 25)
+                .attr('fill', '#e74c3c')
+                .attr('rx', 3);
+
+            resetButton.append('text')
+                .attr('x', 35)
+                .attr('y', 17)
+                .attr('text-anchor', 'middle')
+                .attr('fill', 'white')
+                .style('font-size', '12px')
+                .text('Reset Zoom');
+        }
+    }
+
     createBarChart(data, element) {
         const monthlyData = this.aggregateDataByMonth(data);
 
@@ -665,13 +809,27 @@ class NOAAWeatherVisualizer {
             'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
         const days = Array.from({ length: 31 }, (_, i) => i + 1);
 
+        // Apply zoom filter if exists
+        const filteredData = this.heatmapZoom ?
+            heatmapData.filter(d =>
+                d.month >= this.heatmapZoom.startMonth && d.month <= this.heatmapZoom.endMonth &&
+                d.day >= this.heatmapZoom.startDay && d.day <= this.heatmapZoom.endDay
+            ) : heatmapData;
+
+        // Adjust domains based on zoom
+        const dayDomain = this.heatmapZoom ?
+            Array.from({ length: this.heatmapZoom.endDay - this.heatmapZoom.startDay + 1 },
+                (_, i) => i + this.heatmapZoom.startDay) : days;
+        const monthDomain = this.heatmapZoom ?
+            monthNames.slice(this.heatmapZoom.startMonth - 1, this.heatmapZoom.endMonth) : monthNames;
+
         const x = d3.scaleBand()
-            .domain(days)
+            .domain(dayDomain)
             .range([0, this.width])
             .padding(0.01);
 
         const y = d3.scaleBand()
-            .domain(monthNames)
+            .domain(monthDomain)
             .range([0, this.height])
             .padding(0.01);
 
@@ -679,8 +837,11 @@ class NOAAWeatherVisualizer {
             .interpolator(element === 'PRCP' ? d3.interpolateBlues : d3.interpolateRdYlBu)
             .domain(d3.extent(heatmapData, d => d.value));
 
-        this.g.selectAll('.heat-rect')
-            .data(heatmapData)
+        // Create a group for heat rectangles that will be above the brush
+        const heatGroup = this.g.append('g').attr('class', 'heat-group');
+        
+        heatGroup.selectAll('.heat-rect')
+            .data(filteredData)
             .enter().append('rect')
             .attr('class', 'heat-rect')
             .attr('x', d => x(d.day))
@@ -688,16 +849,10 @@ class NOAAWeatherVisualizer {
             .attr('width', x.bandwidth())
             .attr('height', y.bandwidth())
             .attr('fill', d => d.value ? colorScale(d.value) : '#f8f9fa')
-            .on('mouseover', (event, d) => {
-                this.tooltip
-                    .style('opacity', 1)
-                    .html(`${monthNames[d.month - 1]} ${d.day}<br/>${this.getValueLabel(element)}: ${d.value ? d.value.toFixed(2) : 'No data'}`)
-                    .style('left', (event.pageX + 10) + 'px')
-                    .style('top', (event.pageY - 10) + 'px');
-            })
-            .on('mouseout', () => {
-                this.tooltip.style('opacity', 0);
-            });
+            .style('pointer-events', 'none');
+
+        // Add brush for heatmap zoom selection on TOP of the heatmap rectangles
+        this.addHeatmapBrush(x, y, monthNames, data, element, heatmapData);
 
         this.g.append('g')
             .attr('transform', `translate(0,${this.height})`)
@@ -707,6 +862,9 @@ class NOAAWeatherVisualizer {
             .call(d3.axisLeft(y));
 
         this.addAxesLabels('Day of Month', 'Month');
+
+        // Add zoom reset button if zoomed
+        this.addHeatmapZoomControls(data, element);
     }
 
     aggregateDataByDate(data) {
