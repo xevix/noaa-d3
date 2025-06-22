@@ -6,6 +6,7 @@ class NOAAWeatherVisualizer {
         this.availableStations = [];
         this.availableLocations = { countries: [], states: [] };
         this.isBrushing = false;
+        this.heatmapDateRange = null;
 
         this.initializeEventListeners();
         this.setupChart();
@@ -31,6 +32,8 @@ class NOAAWeatherVisualizer {
         };
 
         document.getElementById('year-select').addEventListener('change', () => {
+            this.heatmapZoom = null;
+            this.heatmapDateRange = null;
             this.updateURLParams();
             this.loadAvailableElements();
             this.loadLocations();
@@ -306,58 +309,67 @@ class NOAAWeatherVisualizer {
     restoreFiltersFromURL() {
         const urlParams = new URLSearchParams(window.location.search);
 
-        // Restore year
-        const year = urlParams.get('year');
-        if (year && this.availableYears.includes(parseInt(year))) {
-            document.getElementById('year-select').value = year;
+        // Restore simple select values
+        document.getElementById('year-select').value = urlParams.get('year') || this.availableYears[0] || '2024';
+        document.getElementById('element-select').value = urlParams.get('element') || 'TMAX';
+        document.getElementById('chart-type').value = urlParams.get('chartType') || 'line';
+
+        // Country and state will be handled by populateLocationSelectors to ensure they exist
+        // Store them for later use
+        this.urlCountry = urlParams.get('country');
+        this.urlState = urlParams.get('state');
+
+        if (urlParams.has('station')) {
+            // Station will be selected in populateStationSelector
+            this.urlStation = urlParams.get('station');
         }
 
-        // Restore element
-        const element = urlParams.get('element');
-        if (element) {
-            document.getElementById('element-select').value = element;
-        }
+        const startDate = urlParams.get('startDate');
+        const endDate = urlParams.get('endDate');
 
-        // Restore chart type
-        const chartType = urlParams.get('chart');
-        if (chartType) {
-            document.getElementById('chart-type').value = chartType;
-        }
+        if (startDate && endDate) {
+            const start = new Date(startDate);
+            const end = new Date(endDate);
+            
+            // Basic validation
+            if (!isNaN(start.getTime()) && !isNaN(end.getTime())) {
+                this.heatmapDateRange = { start, end };
 
-        // Restore country
-        const country = urlParams.get('country');
-        if (country) {
-            document.getElementById('country-select').value = country;
+                // We need to set heatmapZoom to something non-null for the 'Reset' button to appear.
+                // The actual values don't matter as much as the presence of the object.
+                // We can derive them from the dates.
+                this.heatmapZoom = {
+                    startDay: start.getDate(),
+                    endDay: end.getDate(),
+                    startMonth: start.getMonth() + 1,
+                    endMonth: end.getMonth() + 1
+                };
+            }
         }
-
-        // Restore state
-        const state = urlParams.get('state');
-        if (state) {
-            document.getElementById('state-select').value = state;
-        }
-
-        // Restore station (will be set after stations are loaded)
-        this.urlStation = urlParams.get('station');
     }
 
     updateURLParams() {
-        const year = document.getElementById('year-select').value;
-        const element = document.getElementById('element-select').value;
-        const chartType = document.getElementById('chart-type').value;
-        const country = document.getElementById('country-select').value;
-        const state = document.getElementById('state-select').value;
-        const station = document.getElementById('station-select').value;
-
         const params = new URLSearchParams();
-        if (year) params.set('year', year);
-        if (element) params.set('element', element);
-        if (chartType) params.set('chart', chartType);
+        params.set('year', document.getElementById('year-select').value);
+        params.set('element', document.getElementById('element-select').value);
+        params.set('chartType', document.getElementById('chart-type').value);
+
+        const country = document.getElementById('country-select').value;
         if (country) params.set('country', country);
+
+        const state = document.getElementById('state-select').value;
         if (state) params.set('state', state);
+
+        const station = document.getElementById('station-select').value;
         if (station) params.set('station', station);
 
-        const newURL = `${window.location.pathname}${params.toString() ? '?' + params.toString() : ''}`;
-        window.history.replaceState({}, '', newURL);
+        if (this.heatmapDateRange) {
+            params.set('startDate', this.heatmapDateRange.start.toISOString().slice(0, 10));
+            params.set('endDate', this.heatmapDateRange.end.toISOString().slice(0, 10));
+        }
+
+        const newUrl = `${window.location.pathname}?${params.toString()}`;
+        window.history.pushState({}, '', newUrl);
     }
 
     async loadDefaultData() {
@@ -470,7 +482,6 @@ class NOAAWeatherVisualizer {
             this.currentData = data;
             this.originalData = [...data]; // Store original data for zoom reset
             this.zoomExtent = null; // Reset line chart zoom
-            this.heatmapZoom = null; // Reset heatmap zoom
             this.visualizeData(data, chartType, element);
             
             // Also load and visualize world map data
@@ -533,6 +544,11 @@ class NOAAWeatherVisualizer {
             const params = new URLSearchParams();
             if (country) params.append('country', country);
             if (state) params.append('state', state);
+            
+            if (this.heatmapDateRange) {
+                params.append('startDate', this.heatmapDateRange.start.toISOString().slice(0, 10));
+                params.append('endDate', this.heatmapDateRange.end.toISOString().slice(0, 10));
+            }
             
             const response = await fetch(`/api/world-data/${year}/${element}?${params}`);
             if (!response.ok) {
@@ -1087,10 +1103,11 @@ class NOAAWeatherVisualizer {
             const endMonthName = monthDomain[endMonthIndex];
 
             // Convert month names to month numbers (1-12)
-            const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+            const monthNamesList = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
                 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-            const startMonth = monthNames.indexOf(startMonthName) + 1;
-            const endMonth = monthNames.indexOf(endMonthName) + 1;
+            const startMonth = monthNamesList.indexOf(startMonthName) + 1;
+            const endMonth = monthNamesList.indexOf(endMonthName) + 1;
+            const year = document.getElementById('year-select').value;
 
             // Store zoom state
             this.heatmapZoom = {
@@ -1100,12 +1117,21 @@ class NOAAWeatherVisualizer {
                 endMonth
             };
 
+            this.heatmapDateRange = {
+                start: new Date(year, startMonth - 1, startDay),
+                end: new Date(year, endMonth - 1, endDay)
+            };
+
             // Clear the brush selection
             this.g.select('.heatmap-brush').call(brush.move, null);
 
             // Re-render the heatmap with the new zoom extent
             this.g.selectAll('*').remove();
             this.createHeatMap(originalData, element);
+
+            // Reload world map data with the new date range
+            this.loadAndVisualizeWorldMap(year, element);
+            this.updateURLParams();
         });
     }
 
@@ -1118,8 +1144,13 @@ class NOAAWeatherVisualizer {
                 .style('cursor', 'pointer')
                 .on('click', () => {
                     this.heatmapZoom = null;
+                    this.heatmapDateRange = null;
                     this.g.selectAll('*').remove();
                     this.createHeatMap(originalData, element);
+                    // Also reload the world map to reset its date filter
+                    const year = document.getElementById('year-select').value;
+                    this.loadAndVisualizeWorldMap(year, element);
+                    this.updateURLParams();
                 });
 
             resetButton.append('rect')

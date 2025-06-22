@@ -222,6 +222,7 @@ app.get('/api/world-data/:year/:element', async (req, res) => {
     const { year, element } = req.params;
     const selectedCountry = req.query.country;
     const selectedState = req.query.state;
+    const { startDate, endDate } = req.query;
 
     try {
         let query;
@@ -237,6 +238,11 @@ app.get('/api/world-data/:year/:element', async (req, res) => {
             ];
             if (selectedCountry) {
                 whereClauses.push(`c.name = '${selectedCountry}'`);
+            }
+            if (startDate && endDate) {
+                const startYYYYMMDD = startDate.replace(/-/g, '');
+                const endYYYYMMDD = endDate.replace(/-/g, '');
+                whereClauses.push(`w.date BETWEEN '${startYYYYMMDD}' AND '${endYYYYMMDD}'`);
             }
 
             query = `
@@ -259,6 +265,13 @@ app.get('/api/world-data/:year/:element', async (req, res) => {
             `;
         } else if (selectedCountry) {
             // When only a country is selected, show all states for that country
+            let dateFilter = '';
+            if (startDate && endDate) {
+                const startYYYYMMDD = startDate.replace(/-/g, '');
+                const endYYYYMMDD = endDate.replace(/-/g, '');
+                dateFilter = ` AND w.date BETWEEN '${startYYYYMMDD}' AND '${endYYYYMMDD}'`;
+            }
+
             query = `
                 SELECT 
                     'state' as type,
@@ -278,6 +291,7 @@ app.get('/api/world-data/:year/:element', async (req, res) => {
                     AND c.name IS NOT NULL
                     AND states.name IS NOT NULL
                     AND c.name = '${selectedCountry}'
+                    ${dateFilter}
                 GROUP BY c.name, states.name
                 HAVING COUNT(*) >= 10
                 
@@ -296,10 +310,17 @@ app.get('/api/world-data/:year/:element', async (req, res) => {
                     AND w.DATA_VALUE != -9999
                     AND c.name IS NOT NULL
                     AND c.name = '${selectedCountry}'
+                    ${dateFilter}
                 GROUP BY c.name
             `;
         } else {
             // When no country is selected, show all countries
+            let dateFilter = '';
+            if (startDate && endDate) {
+                const startYYYYMMDD = startDate.replace(/-/g, '');
+                const endYYYYMMDD = endDate.replace(/-/g, '');
+                dateFilter = ` AND w.date BETWEEN '${startYYYYMMDD}' AND '${endYYYYMMDD}'`;
+            }
             query = `
                 SELECT 
                     'country' as type,
@@ -315,6 +336,7 @@ app.get('/api/world-data/:year/:element', async (req, res) => {
                 WHERE w.DATA_VALUE IS NOT NULL 
                     AND w.DATA_VALUE != -9999
                     AND c.name IS NOT NULL
+                    ${dateFilter}
                 GROUP BY c.name
                 HAVING COUNT(*) >= 100
             `;
