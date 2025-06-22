@@ -218,6 +218,131 @@ app.get('/api/years', async (req, res) => {
     }
 });
 
+app.get('/api/world-data/:year/:element', async (req, res) => {
+    const { year, element } = req.params;
+    const selectedCountry = req.query.country;
+    const selectedState = req.query.state;
+
+    try {
+        let query;
+        if (selectedState) {
+            // When a state is selected, show data for that specific state.
+            // If a country is also selected, it acts as an additional filter.
+            let whereClauses = [
+                `w.DATA_VALUE IS NOT NULL`,
+                `w.DATA_VALUE != -9999`,
+                `c.name IS NOT NULL`,
+                `states.name IS NOT NULL`,
+                `states.name = '${selectedState}'`
+            ];
+            if (selectedCountry) {
+                whereClauses.push(`c.name = '${selectedCountry}'`);
+            }
+
+            query = `
+                SELECT 
+                    'state' as type,
+                    states.name as name,
+                    c.name as parent,
+                    AVG(CAST(w.DATA_VALUE AS DOUBLE)) as avg_value,
+                    COUNT(*) as data_points
+                FROM read_parquet('/Users/xevix/Downloads/data/noaa/by_year/YEAR=${year}/ELEMENT=${element}/*.parquet') w
+                LEFT JOIN read_parquet('/Users/xevix/Downloads/data/noaa/ghcnd-stations.parquet') st
+                    ON w.ID = st.id
+                LEFT JOIN read_parquet('/Users/xevix/Downloads/data/noaa/ghcnd-countries.parquet') c
+                    ON SUBSTRING(w.ID, 1, 2) = c.s
+                LEFT JOIN read_parquet('/Users/xevix/Downloads/data/noaa/ghcnd-states.parquet') states
+                    ON st.st = states.st
+                WHERE ${whereClauses.join(' AND ')}
+                GROUP BY c.name, states.name
+                HAVING COUNT(*) >= 10
+            `;
+        } else if (selectedCountry) {
+            // When only a country is selected, show all states for that country
+            query = `
+                SELECT 
+                    'state' as type,
+                    states.name as name,
+                    c.name as parent,
+                    AVG(CAST(w.DATA_VALUE AS DOUBLE)) as avg_value,
+                    COUNT(*) as data_points
+                FROM read_parquet('/Users/xevix/Downloads/data/noaa/by_year/YEAR=${year}/ELEMENT=${element}/*.parquet') w
+                LEFT JOIN read_parquet('/Users/xevix/Downloads/data/noaa/ghcnd-stations.parquet') st
+                    ON w.ID = st.id
+                LEFT JOIN read_parquet('/Users/xevix/Downloads/data/noaa/ghcnd-countries.parquet') c
+                    ON SUBSTRING(w.ID, 1, 2) = c.s
+                LEFT JOIN read_parquet('/Users/xevix/Downloads/data/noaa/ghcnd-states.parquet') states
+                    ON st.st = states.st
+                WHERE w.DATA_VALUE IS NOT NULL 
+                    AND w.DATA_VALUE != -9999
+                    AND c.name IS NOT NULL
+                    AND states.name IS NOT NULL
+                    AND c.name = '${selectedCountry}'
+                GROUP BY c.name, states.name
+                HAVING COUNT(*) >= 10
+                
+                UNION ALL
+
+                SELECT
+                    'country' as type,
+                    c.name as name,
+                    NULL as parent,
+                    AVG(CAST(w.DATA_VALUE AS DOUBLE)) as avg_value,
+                    COUNT(*) as data_points
+                FROM read_parquet('/Users/xevix/Downloads/data/noaa/by_year/YEAR=${year}/ELEMENT=${element}/*.parquet') w
+                LEFT JOIN read_parquet('/Users/xevix/Downloads/data/noaa/ghcnd-countries.parquet') c
+                    ON SUBSTRING(w.ID, 1, 2) = c.s
+                WHERE w.DATA_VALUE IS NOT NULL 
+                    AND w.DATA_VALUE != -9999
+                    AND c.name IS NOT NULL
+                    AND c.name = '${selectedCountry}'
+                GROUP BY c.name
+            `;
+        } else {
+            // When no country is selected, show all countries
+            query = `
+                SELECT 
+                    'country' as type,
+                    c.name as name,
+                    NULL as parent,
+                    AVG(CAST(w.DATA_VALUE AS DOUBLE)) as avg_value,
+                    COUNT(*) as data_points
+                FROM read_parquet('/Users/xevix/Downloads/data/noaa/by_year/YEAR=${year}/ELEMENT=${element}/*.parquet') w
+                LEFT JOIN read_parquet('/Users/xevix/Downloads/data/noaa/ghcnd-stations.parquet') st
+                    ON w.ID = st.id
+                LEFT JOIN read_parquet('/Users/xevix/Downloads/data/noaa/ghcnd-countries.parquet') c
+                    ON SUBSTRING(w.ID, 1, 2) = c.s
+                WHERE w.DATA_VALUE IS NOT NULL 
+                    AND w.DATA_VALUE != -9999
+                    AND c.name IS NOT NULL
+                GROUP BY c.name
+                HAVING COUNT(*) >= 100
+            `;
+        }
+
+        connection.all(query, (err, result) => {
+            if (err) {
+                console.error('Database error getting world data:', err);
+                res.status(500).json({ error: 'Failed to get world data' });
+            } else {
+                const processedData = result.map(row => ({
+                    type: row.type,
+                    name: row.name,
+                    parent: row.parent,
+                    value: convertValue(Number(row.avg_value), element),
+                    dataPoints: Number(row.data_points)
+                }));
+
+                console.log(`Found ${processedData.length} geographic regions for ${year}/${element}`);
+                res.json(processedData);
+            }
+        });
+    } catch (error) {
+        console.error('Server error getting world data:', error);
+        res.status(500).json({ error: 'Server error getting world data' });
+    }
+});
+
 app.get('/api/weather/:year/:element', async (req, res) => {
     const { year, element } = req.params;
     const limit = req.query.limit || 5000;

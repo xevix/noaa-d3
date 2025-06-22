@@ -243,6 +243,13 @@
             </div>
         </div>
         
+        <div id="map-container" style="width: 100%; height: 500px; margin-top: 20px; border: 1px solid #ddd; border-radius: 4px; background: white; position: relative;">
+            <div id="map-loading" class="loading" style="display: none;">
+                <div class="spinner"></div>
+                Loading world map...
+            </div>
+        </div>
+        
         <div class="zoom-instructions" id="zoom-instructions" style="display: none;">
             💡 <strong>Line Chart:</strong> Click and drag horizontally to zoom into a time period. Click "Reset Zoom" to return to full view.<br>
             📊 <strong>Auto-Update:</strong> Data refreshes automatically when you change filters above.
@@ -254,6 +261,7 @@
     <div class="tooltip" id="tooltip"></div>
     
     <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://d3js.org/topojson.v3.min.js"></script>
     <script src="app.js"></script>
 </body>
 </html>

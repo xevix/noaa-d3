@@ -9,6 +9,7 @@ class NOAAWeatherVisualizer {
 
         this.initializeEventListeners();
         this.setupChart();
+        this.setupWorldMap();
 
         // Initialize the application
         this.initialize();
@@ -408,6 +409,46 @@ class NOAAWeatherVisualizer {
         this.heatmapZoom = null;
     }
 
+    setupWorldMap() {
+        const container = d3.select('#map-container');
+        const containerRect = container.node().getBoundingClientRect();
+
+        this.mapWidth = containerRect.width;
+        this.mapHeight = containerRect.height;
+
+        this.mapSvg = container.append('svg')
+            .attr('width', this.mapWidth)
+            .attr('height', this.mapHeight);
+
+        this.mapG = this.mapSvg.append('g');
+
+        // Initialize world map data
+        this.worldData = null;
+        this.loadWorldMap();
+    }
+
+    async loadWorldMap() {
+        try {
+            // Load world topology data from a CDN
+            const response = await fetch('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json');
+            if (!response.ok) {
+                throw new Error('Failed to load world map data');
+            }
+            this.worldData = await response.json();
+            console.log('World map data loaded successfully');
+        } catch (error) {
+            console.error('Error loading world map:', error);
+            // Show error message in map container
+            this.mapG.append('text')
+                .attr('x', this.mapWidth / 2)
+                .attr('y', this.mapHeight / 2)
+                .attr('text-anchor', 'middle')
+                .text('Unable to load world map')
+                .style('font-size', '16px')
+                .style('fill', '#7f8c8d');
+        }
+    }
+
     async loadAndVisualizeData() {
         const year = document.getElementById('year-select').value;
         const element = document.getElementById('element-select').value;
@@ -431,6 +472,9 @@ class NOAAWeatherVisualizer {
             this.zoomExtent = null; // Reset line chart zoom
             this.heatmapZoom = null; // Reset heatmap zoom
             this.visualizeData(data, chartType, element);
+            
+            // Also load and visualize world map data
+            await this.loadAndVisualizeWorldMap(year, element);
         } catch (error) {
             console.error('Error loading data:', error);
             alert('Error loading data. Please try again.');
@@ -472,6 +516,341 @@ class NOAAWeatherVisualizer {
         } catch (error) {
             throw new Error(`Failed to load weather data: ${error.message}`);
         }
+    }
+
+    async loadAndVisualizeWorldMap(year, element) {
+        if (!this.worldData) {
+            console.log('World map data not yet loaded');
+            return;
+        }
+
+        try {
+            document.getElementById('map-loading').style.display = 'block';
+            
+            const country = document.getElementById('country-select').value;
+            const state = document.getElementById('state-select').value;
+            
+            const params = new URLSearchParams();
+            if (country) params.append('country', country);
+            if (state) params.append('state', state);
+            
+            const response = await fetch(`/api/world-data/${year}/${element}?${params}`);
+            if (!response.ok) {
+                throw new Error('Failed to fetch world data');
+            }
+            
+            const worldData = await response.json();
+            this.createWorldMap(worldData, element, country, state);
+        } catch (error) {
+            console.error('Error loading world map data:', error);
+            this.mapG.selectAll('*').remove();
+            this.mapG.append('text')
+                .attr('x', this.mapWidth / 2)
+                .attr('y', this.mapHeight / 2)
+                .attr('text-anchor', 'middle')
+                .text('Error loading world map data')
+                .style('font-size', '16px')
+                .style('fill', '#e74c3c');
+        } finally {
+            document.getElementById('map-loading').style.display = 'none';
+        }
+    }
+
+    createWorldMap(worldData, element, selectedCountry, selectedState) {
+        // Clear existing map
+        this.mapG.selectAll('*').remove();
+
+        // Create projection and path generator for world/country view
+        const projection = d3.geoNaturalEarth1()
+            .scale(140)
+            .translate([this.mapWidth / 2, this.mapHeight / 2]);
+
+        const path = d3.geoPath().projection(projection);
+
+        // Create data lookup for countries and states
+        const dataLookup = new Map();
+        const stateData = new Map();
+        worldData.forEach(d => {
+            if (d.type === 'country') {
+                dataLookup.set(d.name, d.value);
+            } else if (d.type === 'state') {
+                stateData.set(d.name, d.value);
+                if (d.parent) {
+                    dataLookup.set(d.parent, d.value);
+                }
+            }
+        });
+
+        // Get data extent for color scale (combine country and state data)
+        const allValues = [...Array.from(dataLookup.values()), ...Array.from(stateData.values())];
+        const dataExtent = d3.extent(allValues);
+        const colorScale = d3.scaleSequential()
+            .interpolator(element === 'PRCP' ? d3.interpolateBlues : d3.interpolateRdYlBu)
+            .domain(dataExtent);
+
+        // Draw countries
+        const countries = topojson.feature(this.worldData, this.worldData.objects.countries);
+        
+        this.mapG.selectAll('.country')
+            .data(countries.features)
+            .enter().append('path')
+            .attr('class', 'country')
+            .attr('d', path)
+            .attr('fill', d => {
+                const countryName = d.properties.NAME || d.properties.name;
+                
+                // If a country is selected, dim other countries
+                if (selectedCountry && countryName !== selectedCountry) {
+                    return '#e9ecef'; // Light gray for non-selected countries
+                }
+                
+                const value = dataLookup.get(countryName);
+                return value !== undefined ? colorScale(value) : '#f0f0f0';
+            })
+            .attr('stroke', d => {
+                const countryName = d.properties.NAME || d.properties.name;
+                // Highlight the selected country with a thicker border
+                return (selectedCountry && countryName === selectedCountry) ? '#333' : '#666';
+            })
+            .attr('stroke-width', d => {
+                const countryName = d.properties.NAME || d.properties.name;
+                // Thicker border for selected country
+                return (selectedCountry && countryName === selectedCountry) ? 2 : 0.5;
+            })
+            .style('cursor', 'pointer')
+            .on('click', (event, d) => {
+                const countryName = d.properties.NAME || d.properties.name;
+                const countrySelect = document.getElementById('country-select');
+                const stateSelect = document.getElementById('state-select');
+
+                if (countrySelect.value === countryName) {
+                    // If clicking the selected country, deselect it
+                    countrySelect.value = '';
+                } else {
+                    // Otherwise, try to select the new country
+                    const countryExists = Array.from(countrySelect.options).some(opt => opt.value === countryName);
+                    if (countryExists) {
+                        countrySelect.value = countryName;
+                    } else {
+                        console.warn(`Country "${countryName}" not available for the current filters.`);
+                        return; // Exit if country is not valid
+                    }
+                }
+
+                stateSelect.value = ""; // Reset state filter
+
+                // Programmatically trigger the change event to reload data
+                countrySelect.dispatchEvent(new Event('change'));
+            })
+            .on('mouseover', (event, d) => {
+                const countryName = d.properties.NAME || d.properties.name;
+                
+                // Don't show tooltip for dimmed countries when a country is selected
+                if (selectedCountry && countryName !== selectedCountry) {
+                    return;
+                }
+                
+                const value = dataLookup.get(countryName);
+                const tooltipContent = `
+                    <strong>${countryName}</strong><br/>
+                    ${this.getValueLabel(element)}: ${value !== undefined ? value.toFixed(2) : 'No data'}
+                `;
+                
+                this.tooltip
+                    .style('opacity', 1)
+                    .html(tooltipContent)
+                    .style('left', (event.pageX + 10) + 'px')
+                    .style('top', (event.pageY - 10) + 'px');
+            })
+            .on('mouseout', () => {
+                this.tooltip.style('opacity', 0);
+            });
+
+        // Add title
+        let titleText = `Average ${this.getValueLabel(element)} - ${document.getElementById('year-select').value}`;
+        if (selectedState && selectedCountry) {
+            titleText += ` (${selectedState}, ${selectedCountry})`;
+        } else if (selectedCountry) {
+            titleText += ` (${selectedCountry})`;
+        }
+        
+        this.mapG.append('text')
+            .attr('x', this.mapWidth / 2)
+            .attr('y', 20)
+            .attr('text-anchor', 'middle')
+            .style('font-size', '16px')
+            .style('font-weight', 'bold')
+            .style('fill', '#2c3e50')
+            .text(titleText);
+
+        // Add a reset button if a country or state is selected
+        if (selectedCountry || selectedState) {
+            const resetButton = this.mapG.append('g')
+                .attr('class', 'map-reset-button')
+                .attr('transform', `translate(${this.mapWidth - 90}, 10)`)
+                .style('cursor', 'pointer')
+                .on('click', () => {
+                    document.getElementById('country-select').value = '';
+                    document.getElementById('state-select').value = '';
+                    // Trigger change on country select to reload data
+                    document.getElementById('country-select').dispatchEvent(new Event('change'));
+                });
+
+            resetButton.append('rect')
+                .attr('x', 0)
+                .attr('y', 0)
+                .attr('width', 80)
+                .attr('height', 25)
+                .attr('rx', 4)
+                .attr('fill', '#6c757d')
+                .attr('stroke', '#5a6268');
+
+            resetButton.append('text')
+                .attr('x', 40)
+                .attr('y', 17)
+                .attr('text-anchor', 'middle')
+                .attr('fill', 'white')
+                .style('font-size', '12px')
+                .text('Reset Filter');
+        }
+
+        // Add legend
+        this.addMapLegend(colorScale, element, dataExtent);
+    }
+
+    showStateDataDisplay(worldData, element, selectedCountry, selectedState) {
+        // Find the state data
+        const stateInfo = worldData.find(d => d.type === 'state' && d.name === selectedState);
+        
+        if (!stateInfo) {
+            // No data available for this state
+            this.mapG.append('text')
+                .attr('x', this.mapWidth / 2)
+                .attr('y', this.mapHeight / 2)
+                .attr('text-anchor', 'middle')
+                .style('font-size', '18px')
+                .style('fill', '#7f8c8d')
+                .text(`No data available for ${selectedState}, ${selectedCountry}`);
+            return;
+        }
+
+        // Show state data in a centered display
+        const centerX = this.mapWidth / 2;
+        const centerY = this.mapHeight / 2;
+
+        // Background card
+        this.mapG.append('rect')
+            .attr('x', centerX - 200)
+            .attr('y', centerY - 100)
+            .attr('width', 400)
+            .attr('height', 200)
+            .attr('fill', '#f8f9fa')
+            .attr('stroke', '#dee2e6')
+            .attr('stroke-width', 2)
+            .attr('rx', 8);
+
+        // Title
+        this.mapG.append('text')
+            .attr('x', centerX)
+            .attr('y', centerY - 60)
+            .attr('text-anchor', 'middle')
+            .style('font-size', '20px')
+            .style('font-weight', 'bold')
+            .style('fill', '#2c3e50')
+            .text(`${selectedState}, ${selectedCountry}`);
+
+        // Year and element
+        this.mapG.append('text')
+            .attr('x', centerX)
+            .attr('y', centerY - 30)
+            .attr('text-anchor', 'middle')
+            .style('font-size', '14px')
+            .style('fill', '#6c757d')
+            .text(`${document.getElementById('year-select').value} • ${this.getValueLabel(element)}`);
+
+        // Main value
+        this.mapG.append('text')
+            .attr('x', centerX)
+            .attr('y', centerY + 10)
+            .attr('text-anchor', 'middle')
+            .style('font-size', '36px')
+            .style('font-weight', 'bold')
+            .style('fill', '#007bff')
+            .text(stateInfo.value.toFixed(2));
+
+        // Data points info
+        this.mapG.append('text')
+            .attr('x', centerX)
+            .attr('y', centerY + 40)
+            .attr('text-anchor', 'middle')
+            .style('font-size', '12px')
+            .style('fill', '#6c757d')
+            .text(`Based on ${stateInfo.dataPoints.toLocaleString()} data points`);
+
+        // Note about focusing on state
+        this.mapG.append('text')
+            .attr('x', centerX)
+            .attr('y', centerY + 70)
+            .attr('text-anchor', 'middle')
+            .style('font-size', '11px')
+            .style('fill', '#868e96')
+            .text('Data filtered to selected state only');
+    }
+
+    addMapLegend(colorScale, element, dataExtent) {
+        const legendWidth = 300;
+        const legendHeight = 20;
+        const legendX = this.mapWidth - legendWidth - 20;
+        const legendY = this.mapHeight - 40;
+
+        // Create gradient
+        const defs = this.mapSvg.append('defs');
+        const gradient = defs.append('linearGradient')
+            .attr('id', 'map-legend-gradient')
+            .attr('x1', '0%')
+            .attr('x2', '100%');
+
+        const steps = 10;
+        for (let i = 0; i <= steps; i++) {
+            const value = dataExtent[0] + (dataExtent[1] - dataExtent[0]) * (i / steps);
+            gradient.append('stop')
+                .attr('offset', `${(i / steps) * 100}%`)
+                .attr('stop-color', colorScale(value));
+        }
+
+        // Add legend rectangle
+        this.mapG.append('rect')
+            .attr('x', legendX)
+            .attr('y', legendY)
+            .attr('width', legendWidth)
+            .attr('height', legendHeight)
+            .style('fill', 'url(#map-legend-gradient)')
+            .style('stroke', '#666')
+            .style('stroke-width', 1);
+
+        // Add legend labels
+        this.mapG.append('text')
+            .attr('x', legendX)
+            .attr('y', legendY - 5)
+            .style('font-size', '12px')
+            .style('fill', '#2c3e50')
+            .text(dataExtent[0].toFixed(1));
+
+        this.mapG.append('text')
+            .attr('x', legendX + legendWidth)
+            .attr('y', legendY - 5)
+            .attr('text-anchor', 'end')
+            .style('font-size', '12px')
+            .style('fill', '#2c3e50')
+            .text(dataExtent[1].toFixed(1));
+
+        this.mapG.append('text')
+            .attr('x', legendX + legendWidth / 2)
+            .attr('y', legendY - 5)
+            .attr('text-anchor', 'middle')
+            .style('font-size', '12px')
+            .style('fill', '#2c3e50')
+            .text(this.getValueLabel(element));
     }
 
     parseDate(dateString) {
@@ -597,7 +976,7 @@ class NOAAWeatherVisualizer {
             .attr('d', line);
 
         // Add brush for zoom selection (add before data points so it doesn't interfere with tooltips)
-        this.addBrushZoom(x, aggregatedData, element);
+        this.addBrushZoom(x, element);
 
         // Add data points (after brush so they receive mouse events)
         const circles = this.g.selectAll('.dot')
@@ -856,7 +1235,7 @@ class NOAAWeatherVisualizer {
 
         this.g.append('g')
             .attr('transform', `translate(0,${this.height})`)
-            .call(d3.axisBottom(x).tickValues(x.domain().filter((d, i) => !(i % 5))));
+            .call(d3.axisBottom(x).tickValues(x.domain().filter((_, i) => !(i % 5))));
 
         this.g.append('g')
             .call(d3.axisLeft(y));
@@ -916,7 +1295,7 @@ class NOAAWeatherVisualizer {
             });
     }
 
-    addBrushZoom(xScale, data, element) {
+    addBrushZoom(xScale, element) {
         const brush = d3.brushX()
             .extent([[0, 0], [this.width, this.height]])
             .on('end', (event) => {
