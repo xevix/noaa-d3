@@ -7,6 +7,7 @@ class NOAAWeatherVisualizer {
         this.availableLocations = { countries: [], states: [] };
         this.isBrushing = false;
         this.heatmapDateRange = null;
+        this.isInitialized = false;
 
         this.initializeEventListeners();
         this.setupChart();
@@ -22,67 +23,91 @@ class NOAAWeatherVisualizer {
             this.loadAndVisualizeData();
         });
 
+        // Copy query button
+        document.getElementById('copy-query').addEventListener('click', () => {
+            this.copyQueryToClipboard();
+        });
+
+        // Copy stations query button
+        document.getElementById('copy-stations-query').addEventListener('click', () => {
+            this.copyStationsQueryToClipboard();
+        });
+
         // Auto-reload when filters change with debouncing
         let debounceTimer = null;
         const debouncedLoad = () => {
             clearTimeout(debounceTimer);
             debounceTimer = setTimeout(() => {
-                this.loadAndVisualizeData();
+                if (this.isInitialized) {
+                    this.updateURLParams();
+                    this.loadAndVisualizeData();
+                }
             }, 150); // Small delay to prevent rapid firing
         };
 
         document.getElementById('year-select').addEventListener('change', () => {
             this.heatmapZoom = null;
             this.heatmapDateRange = null;
-            this.updateURLParams();
             this.loadAvailableElements();
             this.loadLocations();
             this.loadStations();
             debouncedLoad();
         });
         document.getElementById('element-select').addEventListener('change', () => {
-            this.updateURLParams();
             this.loadLocations();
             this.loadStations();
             debouncedLoad();
         });
         document.getElementById('chart-type').addEventListener('change', () => {
-            this.updateURLParams();
             debouncedLoad();
         });
-        document.getElementById('country-select').addEventListener('change', () => {
-            this.updateURLParams();
-            this.loadLocations(); // Reload locations to update state dropdown
+        document.getElementById('country-select').addEventListener('change', async () => {
+            console.log('Country changed to:', document.getElementById('country-select').value);
+            await this.loadLocations(); // Reload locations to update state dropdown
             this.filterAndLoadStations();
             debouncedLoad();
         });
         document.getElementById('state-select').addEventListener('change', () => {
-            this.updateURLParams();
             this.filterAndLoadStations();
             debouncedLoad();
         });
         document.getElementById('station-select').addEventListener('change', () => {
-            this.updateURLParams();
             debouncedLoad();
         });
     }
 
     async initialize() {
         try {
+            this.isInitialized = false;
+            
+            // Store URL params early for proper restoration
+            const urlParams = new URLSearchParams(window.location.search);
+            this.urlCountry = urlParams.get('country') || '';
+            this.urlState = urlParams.get('state') || '';
+            this.urlStation = urlParams.get('station') || '';
+            
+            console.log(`URL params: country="${this.urlCountry}", state="${this.urlState}", station="${this.urlStation}"`);
+            
             // Load available years first
             await this.loadAvailableYears();
             // Load available elements for the selected year
             await this.loadAvailableElements();
-            // Restore filters from URL
-            this.restoreFiltersFromURL();
-            // Load locations and stations for default selection
+            // Restore basic filters from URL (year, element, chart type)
+            this.restoreBasicFiltersFromURL();
+            // Load locations with the URL country filter
             await this.loadLocations();
+            // Load stations with the URL country and state filters
             await this.loadStations();
             // Then load default data
             await this.loadDefaultData();
+            
+            // Clear URL params after successful initialization
+            this.clearUrlParams();
         } catch (error) {
             console.error('Error during initialization:', error);
             this.showErrorMessage('Failed to initialize application. Please refresh the page.');
+        } finally {
+            this.isInitialized = true;
         }
     }
 
@@ -183,7 +208,18 @@ class NOAAWeatherVisualizer {
         if (!year || !element) return;
 
         try {
-            const response = await fetch(`/api/stations/${year}/${element}`);
+            // Add geographic filters to the API call
+            const params = new URLSearchParams();
+            // Use URL parameters during initialization, otherwise use dropdown values
+            const country = this.urlCountry || document.getElementById('country-select').value;
+            const state = this.urlState || document.getElementById('state-select').value;
+            
+            if (country) params.append('country', country);
+            if (state) params.append('state', state);
+            
+            const url = `/api/stations/${year}/${element}${params.toString() ? '?' + params.toString() : ''}`;
+            const response = await fetch(url);
+            
             if (!response.ok) {
                 throw new Error('Failed to fetch available stations');
             }
@@ -203,18 +239,8 @@ class NOAAWeatherVisualizer {
         const stationSelect = document.getElementById('station-select');
         stationSelect.innerHTML = '<option value="">All Stations (Average)</option>';
 
-        // Get current geographic filters
-        const selectedCountry = document.getElementById('country-select').value;
-        const selectedState = document.getElementById('state-select').value;
-
-        // Filter stations based on geographic selections
-        const filteredStations = this.availableStations.filter(station => {
-            if (selectedCountry && station.country !== selectedCountry) return false;
-            if (selectedState && station.state !== selectedState) return false;
-            return true;
-        });
-
-        filteredStations.forEach(station => {
+        // No need for client-side filtering since it's now done server-side
+        this.availableStations.forEach(station => {
             const option = document.createElement('option');
             option.value = station.id;
             option.textContent = station.name;
@@ -231,7 +257,7 @@ class NOAAWeatherVisualizer {
         // Clear the URL station after processing
         this.urlStation = null;
 
-        console.log(`Populated station selector with ${filteredStations.length}/${this.availableStations.length} stations`);
+        console.log(`Populated station selector with ${this.availableStations.length} stations`);
     }
 
     async loadLocations() {
@@ -241,8 +267,8 @@ class NOAAWeatherVisualizer {
         if (!year || !element) return;
 
         try {
-            // Add country parameter if selected
-            const country = document.getElementById('country-select').value;
+            // Use URL country parameter during initialization, otherwise use dropdown value
+            const country = this.urlCountry || document.getElementById('country-select').value;
             const params = new URLSearchParams();
             if (country) {
                 params.append('country', country);
@@ -255,6 +281,7 @@ class NOAAWeatherVisualizer {
             }
 
             this.availableLocations = await response.json();
+            console.log('Loaded locations:', this.availableLocations);
             this.populateLocationSelectors();
 
         } catch (error) {
@@ -265,40 +292,52 @@ class NOAAWeatherVisualizer {
     }
 
     populateLocationSelectors() {
-        // Get URL parameters for restoration
-        const urlParams = new URLSearchParams(window.location.search);
-        const urlCountry = urlParams.get('country');
-        const urlState = urlParams.get('state');
-
         // Populate country selector
         const countrySelect = document.getElementById('country-select');
-        const currentCountry = countrySelect.value || urlCountry;
+        // Use stored URL country or current dropdown value
+        const targetCountry = this.urlCountry || countrySelect.value;
+        console.log(`Populating countries: target country is "${targetCountry}", URL country is "${this.urlCountry}"`);
         countrySelect.innerHTML = '<option value="">All Countries</option>';
 
         this.availableLocations.countries.forEach(country => {
             const option = document.createElement('option');
             option.value = country;
             option.textContent = country;
-            if (country === currentCountry) option.selected = true;
+            if (country === targetCountry) {
+                option.selected = true;
+                console.log(`Selected country option: "${country}"`);
+            }
             countrySelect.appendChild(option);
         });
 
+        // Don't clear URL country yet - still needed for stations loading
+
         // Populate state selector
         const stateSelect = document.getElementById('state-select');
-        const currentState = stateSelect.value || urlState;
+        // Use stored URL state or current dropdown value
+        const targetState = this.urlState || stateSelect.value;
         stateSelect.innerHTML = '<option value="">All States/Regions</option>';
+
+        // Check if target state is in the filtered list
+        const availableStateNames = this.availableLocations.states.filter(s => s);
+        const shouldPreserveState = targetState && availableStateNames.includes(targetState);
+
+        console.log(`Populating states: ${availableStateNames.length} available, target: "${targetState}", shouldPreserve: ${shouldPreserveState}`);
 
         this.availableLocations.states.forEach(state => {
             if (state) { // Only add non-null states
                 const option = document.createElement('option');
                 option.value = state;
                 option.textContent = state;
-                if (state === currentState) option.selected = true;
+                if (shouldPreserveState && state === targetState) option.selected = true;
                 stateSelect.appendChild(option);
             }
         });
 
-        console.log(`Populated location selectors: ${this.availableLocations.countries.length} countries, ${this.availableLocations.states.filter(s => s).length} states`);
+        // Don't clear URL state yet - still needed for stations loading
+
+        // Log result for debugging
+        console.log(`State dropdown final value: "${stateSelect.value}"`);
     }
 
     filterAndLoadStations() {
@@ -306,23 +345,21 @@ class NOAAWeatherVisualizer {
         this.loadStations();
     }
 
-    restoreFiltersFromURL() {
+    clearUrlParams() {
+        // Clear URL parameters after initialization to prevent interference with normal operation
+        this.urlCountry = null;
+        this.urlState = null;
+        this.urlStation = null;
+        console.log('URL parameters cleared after initialization');
+    }
+
+    restoreBasicFiltersFromURL() {
         const urlParams = new URLSearchParams(window.location.search);
 
-        // Restore simple select values
+        // Restore simple select values (not geographic filters - those are handled in populate methods)
         document.getElementById('year-select').value = urlParams.get('year') || this.availableYears[0] || '2024';
         document.getElementById('element-select').value = urlParams.get('element') || 'TMAX';
         document.getElementById('chart-type').value = urlParams.get('chartType') || 'line';
-
-        // Country and state will be handled by populateLocationSelectors to ensure they exist
-        // Store them for later use
-        this.urlCountry = urlParams.get('country');
-        this.urlState = urlParams.get('state');
-
-        if (urlParams.has('station')) {
-            // Station will be selected in populateStationSelector
-            this.urlStation = urlParams.get('station');
-        }
 
         const startDate = urlParams.get('startDate');
         const endDate = urlParams.get('endDate');
@@ -378,7 +415,7 @@ class NOAAWeatherVisualizer {
             document.getElementById('loading').style.display = 'block';
             await this.loadAndVisualizeData();
             // Update URL with current filter state
-            this.updateURLParams();
+            // this.updateURLParams();
         } catch (error) {
             console.error('Error loading default data:', error);
             this.showErrorMessage('Click "🔄 Refresh" to load weather data');
@@ -634,7 +671,7 @@ class NOAAWeatherVisualizer {
                 return (selectedCountry && countryName === selectedCountry) ? 2 : 0.5;
             })
             .style('cursor', 'pointer')
-            .on('click', (event, d) => {
+            .on('click', (_, d) => {
                 const countryName = d.properties.NAME || d.properties.name;
                 const countrySelect = document.getElementById('country-select');
                 const stateSelect = document.getElementById('state-select');
@@ -1405,6 +1442,172 @@ class NOAAWeatherVisualizer {
             .style('font-size', '12px')
             .style('fill', '#2c3e50')
             .text(xLabel);
+    }
+
+    generateCurrentQuery() {
+        const year = document.getElementById('year-select').value;
+        const element = document.getElementById('element-select').value;
+        const station = document.getElementById('station-select').value;
+        const country = document.getElementById('country-select').value;
+        const state = document.getElementById('state-select').value;
+
+        if (!year || !element) {
+            return 'No query available - please select year and element first';
+        }
+
+        // Build geographic filter if needed
+        let geoFilter = '';
+        if (country || state) {
+            geoFilter = `
+                AND ID IN (
+                    SELECT st.id 
+                    FROM read_parquet('/Users/xevix/Downloads/data/noaa/ghcnd-stations.parquet') st
+                    LEFT JOIN read_parquet('/Users/xevix/Downloads/data/noaa/ghcnd-countries.parquet') c
+                        ON SUBSTRING(st.id, 1, 2) = c.s
+                    LEFT JOIN read_parquet('/Users/xevix/Downloads/data/noaa/ghcnd-states.parquet') states
+                        ON st.st = states.st
+                    WHERE 1=1
+                    ${country ? `AND c.name = '${country}'` : ''}
+                    ${state ? `AND states.name = '${state}'` : ''}
+                )
+            `;
+        }
+
+        const query = station ? `
+SELECT 
+    DATE as date,
+    CAST(DATA_VALUE AS DOUBLE) as value,
+    1 as station_count,
+    EXTRACT(MONTH FROM STRPTIME(DATE, '%Y%m%d')) as month,
+    EXTRACT(DAY FROM STRPTIME(DATE, '%Y%m%d')) as day,
+    EXTRACT(YEAR FROM STRPTIME(DATE, '%Y%m%d')) as year
+FROM read_parquet('/Users/xevix/Downloads/data/noaa/by_year/YEAR=${year}/ELEMENT=${element}/*.parquet')
+WHERE DATA_VALUE IS NOT NULL 
+    AND DATA_VALUE != -9999
+    AND ID = '${station}'
+    ${geoFilter}
+ORDER BY DATE
+LIMIT 5000;
+        ` : `
+WITH daily_averages AS (
+    SELECT 
+        DATE as date,
+        AVG(CAST(DATA_VALUE AS DOUBLE)) as avg_value,
+        COUNT(*) as station_count,
+        EXTRACT(MONTH FROM STRPTIME(DATE, '%Y%m%d')) as month,
+        EXTRACT(DAY FROM STRPTIME(DATE, '%Y%m%d')) as day,
+        EXTRACT(YEAR FROM STRPTIME(DATE, '%Y%m%d')) as year
+    FROM read_parquet('/Users/xevix/Downloads/data/noaa/by_year/YEAR=${year}/ELEMENT=${element}/*.parquet')
+    WHERE DATA_VALUE IS NOT NULL 
+        AND DATA_VALUE != -9999
+        ${geoFilter}
+    GROUP BY DATE
+    HAVING COUNT(*) >= 1
+)
+SELECT 
+    date,
+    avg_value as value,
+    station_count,
+    month,
+    day,
+    year
+FROM daily_averages
+ORDER BY date
+LIMIT 5000;
+        `;
+
+        return query.trim();
+    }
+
+    async copyQueryToClipboard() {
+        try {
+            const query = this.generateCurrentQuery();
+            await navigator.clipboard.writeText(query);
+            
+            // Show visual feedback
+            const button = document.getElementById('copy-query');
+            const originalText = button.textContent;
+            button.textContent = '✅ Copied!';
+            button.style.backgroundColor = '#27ae60';
+            
+            setTimeout(() => {
+                button.textContent = originalText;
+                button.style.backgroundColor = '';
+            }, 2000);
+        } catch (err) {
+            console.error('Failed to copy query: ', err);
+            alert('Failed to copy query to clipboard');
+        }
+    }
+
+    generateStationsQuery() {
+        const year = document.getElementById('year-select').value;
+        const element = document.getElementById('element-select').value;
+        const country = document.getElementById('country-select').value;
+        const state = document.getElementById('state-select').value;
+
+        if (!year || !element) {
+            return 'No stations query available - please select year and element first';
+        }
+
+        // Build geographic filter if needed
+        let geoFilter = '';
+        if (country || state) {
+            geoFilter = `
+                AND (
+                    ${country ? `c.name = '${country}'` : '1=1'}
+                    ${country && state ? ' AND ' : ''}
+                    ${state ? `states.name = '${state}'` : ''}
+                )
+            `;
+        }
+
+        const query = `
+WITH available_stations AS (
+    SELECT DISTINCT ID as station_id
+    FROM read_parquet('/Users/xevix/Downloads/data/noaa/by_year/YEAR=${year}/ELEMENT=${element}/*.parquet')
+    WHERE ID IS NOT NULL
+)
+SELECT 
+    s.station_id,
+    COALESCE(st.name, s.station_id) as station_name,
+    c.name as country_name,
+    states.name as state_name
+FROM available_stations s
+LEFT JOIN read_parquet('/Users/xevix/Downloads/data/noaa/ghcnd-stations.parquet') st
+    ON s.station_id = st.id
+LEFT JOIN read_parquet('/Users/xevix/Downloads/data/noaa/ghcnd-countries.parquet') c
+    ON SUBSTRING(s.station_id, 1, 2) = c.s
+LEFT JOIN read_parquet('/Users/xevix/Downloads/data/noaa/ghcnd-states.parquet') states
+    ON st.st = states.st
+WHERE st.name IS NOT NULL
+    ${geoFilter}
+ORDER BY station_name
+LIMIT 1000;
+        `;
+
+        return query.trim();
+    }
+
+    async copyStationsQueryToClipboard() {
+        try {
+            const query = this.generateStationsQuery();
+            await navigator.clipboard.writeText(query);
+            
+            // Show visual feedback
+            const button = document.getElementById('copy-stations-query');
+            const originalText = button.textContent;
+            button.textContent = '✅ Copied!';
+            button.style.backgroundColor = '#27ae60';
+            
+            setTimeout(() => {
+                button.textContent = originalText;
+                button.style.backgroundColor = '';
+            }, 2000);
+        } catch (err) {
+            console.error('Failed to copy stations query: ', err);
+            alert('Failed to copy stations query to clipboard');
+        }
     }
 }
 

@@ -18,8 +18,22 @@ app.get('/', (req, res) => {
 
 app.get('/api/stations/:year/:element', async (req, res) => {
     const { year, element } = req.params;
+    const country = req.query.country; // Optional country filter
+    const state = req.query.state; // Optional state filter
 
     try {
+        // Build geographic filter if needed
+        let geoFilter = '';
+        if (country || state) {
+            geoFilter = `
+                AND (
+                    ${country ? `c.name = '${country}'` : '1=1'}
+                    ${country && state ? ' AND ' : ''}
+                    ${state ? `states.name = '${state}'` : ''}
+                )
+            `;
+        }
+
         const query = `
             WITH available_stations AS (
                 SELECT DISTINCT ID as station_id
@@ -39,6 +53,7 @@ app.get('/api/stations/:year/:element', async (req, res) => {
             LEFT JOIN read_parquet('/Users/xevix/Downloads/data/noaa/ghcnd-states.parquet') states
                 ON st.st = states.st
             WHERE st.name IS NOT NULL
+                ${geoFilter}
             ORDER BY station_name
             LIMIT 1000
         `;
@@ -123,10 +138,13 @@ app.get('/api/locations/:year/:element', async (req, res) => {
                     }
                 });
 
-                res.json({
+                const response = {
                     countries: Array.from(countries).sort(),
                     states: Array.from(states).sort()
-                });
+                };
+                
+                console.log(`Locations API: ${country ? `filtered by country "${country}"` : 'no country filter'} - returning ${response.countries.length} countries, ${response.states.length} states`);
+                res.json(response);
             }
         });
     } catch (error) {
@@ -196,7 +214,7 @@ app.get('/api/elements/:year', async (req, res) => {
     }
 });
 
-app.get('/api/years', async (req, res) => {
+app.get('/api/years', async (_, res) => {
     try {
         const dataDir = '/Users/xevix/Downloads/data/noaa/by_year';
 
