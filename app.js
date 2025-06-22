@@ -8,6 +8,9 @@ class NOAAWeatherVisualizer {
         this.isBrushing = false;
         this.heatmapDateRange = null;
         this.isInitialized = false;
+        this.showTable = false;
+        this.currentCountryStats = null;
+        this.tableSortState = { column: null, direction: null }; // null, 'asc', 'desc'
 
         this.initializeEventListeners();
         this.setupChart();
@@ -31,6 +34,11 @@ class NOAAWeatherVisualizer {
         // Copy stations query button
         document.getElementById('copy-stations-query').addEventListener('click', () => {
             this.copyStationsQueryToClipboard();
+        });
+
+        // Table view toggle
+        document.getElementById('show-table').addEventListener('change', (e) => {
+            this.toggleTableView(e.target.checked);
         });
 
         // Auto-reload when filters change with debouncing
@@ -87,6 +95,9 @@ class NOAAWeatherVisualizer {
             this.urlStation = urlParams.get('station') || '';
             
             console.log(`URL params: country="${this.urlCountry}", state="${this.urlState}", station="${this.urlStation}"`);
+            
+            // Initialize table view preference from localStorage
+            this.initializeTableView();
             
             // Load available years first
             await this.loadAvailableYears();
@@ -353,6 +364,310 @@ class NOAAWeatherVisualizer {
         console.log('URL parameters cleared after initialization');
     }
 
+    async loadCountryStats() {
+        const year = document.getElementById('year-select').value;
+        const element = document.getElementById('element-select').value;
+
+        if (!year || !element) return;
+
+        try {
+            // Add geographic filters to the API call
+            const params = new URLSearchParams();
+            // Use URL parameters during initialization, otherwise use dropdown values
+            const country = this.urlCountry || document.getElementById('country-select').value;
+            const state = this.urlState || document.getElementById('state-select').value;
+            
+            if (country) params.append('country', country);
+            if (state) params.append('state', state);
+            
+            // Add date range filter if heatmap zoom is active
+            if (this.heatmapDateRange) {
+                params.append('startDate', this.heatmapDateRange.start.toISOString().slice(0, 10));
+                params.append('endDate', this.heatmapDateRange.end.toISOString().slice(0, 10));
+            }
+            
+            const url = `/api/country-stats/${year}/${element}${params.toString() ? '?' + params.toString() : ''}`;
+            const response = await fetch(url);
+            
+            if (!response.ok) {
+                throw new Error('Failed to fetch country statistics');
+            }
+
+            this.currentCountryStats = await response.json();
+            console.log(`Loaded ${this.currentCountryStats.length} country statistics`);
+
+            // Update table if visible
+            if (this.showTable) {
+                this.populateCountryStatsTable();
+            }
+
+        } catch (error) {
+            console.error('Error loading country statistics:', error);
+            this.currentCountryStats = [];
+            if (this.showTable) {
+                this.populateCountryStatsTable();
+            }
+        }
+    }
+
+    initializeTableView() {
+        // Get table view preference from localStorage, default to false
+        const savedPreference = localStorage.getItem('noaa-show-table');
+        this.showTable = savedPreference === 'true';
+        
+        // Set checkbox state
+        document.getElementById('show-table').checked = this.showTable;
+        
+        // Apply initial visibility
+        this.updateTableVisibility();
+        
+        // Add sorting event listeners to table headers
+        this.initializeTableSorting();
+        
+        console.log(`Table view initialized: ${this.showTable}`);
+    }
+
+    initializeTableSorting() {
+        // Add click event listeners to sortable column headers
+        const headers = document.querySelectorAll('th[data-column]');
+        headers.forEach(header => {
+            header.addEventListener('click', () => {
+                const column = header.dataset.column;
+                this.handleColumnSort(column);
+            });
+        });
+    }
+
+    handleColumnSort(column) {
+        // Toggle sort direction: null -> desc -> asc -> null
+        if (this.tableSortState.column !== column) {
+            // New column, start with descending
+            this.tableSortState.column = column;
+            this.tableSortState.direction = 'desc';
+        } else {
+            // Same column, cycle through states
+            switch (this.tableSortState.direction) {
+                case null:
+                    this.tableSortState.direction = 'desc';
+                    break;
+                case 'desc':
+                    this.tableSortState.direction = 'asc';
+                    break;
+                case 'asc':
+                    this.tableSortState.column = null;
+                    this.tableSortState.direction = null;
+                    break;
+            }
+        }
+
+        // Update visual indicators
+        this.updateSortIndicators();
+
+        // Re-populate table with new sorting
+        if (this.currentCountryStats && this.showTable) {
+            this.populateCountryStatsTable();
+        }
+
+        console.log(`Table sorted by ${this.tableSortState.column} ${this.tableSortState.direction || 'none'}`);
+    }
+
+    updateSortIndicators() {
+        // Clear all indicators
+        const indicators = document.querySelectorAll('.sort-indicator');
+        indicators.forEach(indicator => {
+            indicator.className = 'sort-indicator';
+        });
+
+        // Set active indicator
+        if (this.tableSortState.column && this.tableSortState.direction) {
+            const activeHeader = document.querySelector(`th[data-column="${this.tableSortState.column}"] .sort-indicator`);
+            if (activeHeader) {
+                activeHeader.className = `sort-indicator ${this.tableSortState.direction}`;
+            }
+        }
+    }
+
+    toggleTableView(show) {
+        this.showTable = show;
+        
+        // Save preference to localStorage
+        localStorage.setItem('noaa-show-table', show.toString());
+        
+        // Update visibility
+        this.updateTableVisibility();
+        
+        // If showing table and we have data, populate it
+        if (show && this.currentCountryStats) {
+            this.populateCountryStatsTable();
+        } else if (show) {
+            // Load country stats if we don't have them yet
+            this.loadCountryStats();
+        }
+        
+        console.log(`Table view toggled: ${show}`);
+    }
+
+    updateTableVisibility() {
+        const tableContainer = document.getElementById('data-table-container');
+        tableContainer.style.display = this.showTable ? 'block' : 'none';
+    }
+
+    populateCountryStatsTable() {
+        if (!this.currentCountryStats || !this.showTable) return;
+
+        const tableBody = document.getElementById('data-table-body');
+        const tableInfo = document.getElementById('table-info');
+        
+        // Clear existing rows
+        tableBody.innerHTML = '';
+        
+        // Update table info
+        const year = document.getElementById('year-select').value;
+        const element = document.getElementById('element-select').value;
+        const country = document.getElementById('country-select').value;
+        const state = document.getElementById('state-select').value;
+        
+        let filterText = `${year} ${element} - Country Statistics (Max & Min Values)`;
+        if (country) filterText += ` • ${country}`;
+        if (state) filterText += ` • ${state}`;
+        if (this.heatmapDateRange) {
+            filterText += ` • ${this.heatmapDateRange.start.toISOString().slice(0, 10)} to ${this.heatmapDateRange.end.toISOString().slice(0, 10)}`;
+        }
+        
+        tableInfo.textContent = `${this.currentCountryStats.length} countries • ${filterText}`;
+        
+        // Sort data if needed
+        const sortedData = this.sortTableData([...this.currentCountryStats]);
+        
+        // Populate table rows
+        sortedData.forEach(row => {
+            const tr = document.createElement('tr');
+            tr.style.borderBottom = '1px solid #eee';
+            
+            // Country name
+            const countryCell = document.createElement('td');
+            countryCell.style.padding = '6px 8px';
+            countryCell.style.fontWeight = 'bold';
+            countryCell.textContent = row.country;
+            tr.appendChild(countryCell);
+            
+            // Max value (formatted)
+            const maxValueCell = document.createElement('td');
+            maxValueCell.style.padding = '6px 8px';
+            maxValueCell.style.textAlign = 'right';
+            maxValueCell.style.fontWeight = 'bold';
+            maxValueCell.style.color = '#d63031';
+            maxValueCell.textContent = this.formatValue(row.maxValue, element);
+            tr.appendChild(maxValueCell);
+            
+            // Max station name (with ID as tooltip)
+            const maxStationCell = document.createElement('td');
+            maxStationCell.style.padding = '6px 8px';
+            maxStationCell.textContent = row.maxStationName;
+            maxStationCell.title = `Station ID: ${row.maxStationId} • Date: ${this.formatDate(row.maxDate)}`;
+            tr.appendChild(maxStationCell);
+            
+            // Min value (formatted)
+            const minValueCell = document.createElement('td');
+            minValueCell.style.padding = '6px 8px';
+            minValueCell.style.textAlign = 'right';
+            minValueCell.style.fontWeight = 'bold';
+            minValueCell.style.color = '#0984e3';
+            minValueCell.textContent = this.formatValue(row.minValue, element);
+            tr.appendChild(minValueCell);
+            
+            // Min station name (with ID as tooltip)
+            const minStationCell = document.createElement('td');
+            minStationCell.style.padding = '6px 8px';
+            minStationCell.textContent = row.minStationName;
+            minStationCell.title = `Station ID: ${row.minStationId} • Date: ${this.formatDate(row.minDate)}`;
+            tr.appendChild(minStationCell);
+            
+            // Max date
+            const maxDateCell = document.createElement('td');
+            maxDateCell.style.padding = '6px 8px';
+            maxDateCell.style.textAlign = 'center';
+            maxDateCell.style.fontSize = '12px';
+            maxDateCell.textContent = this.formatDate(row.maxDate);
+            tr.appendChild(maxDateCell);
+            
+            tableBody.appendChild(tr);
+        });
+        
+        console.log(`Country stats table populated with ${sortedData.length} countries, sorted by ${this.tableSortState.column || 'default'}`);
+    }
+
+    sortTableData(data) {
+        if (!this.tableSortState.column || !this.tableSortState.direction) {
+            return data; // No sorting
+        }
+
+        return data.sort((a, b) => {
+            let valueA, valueB;
+
+            switch (this.tableSortState.column) {
+                case 'country':
+                    valueA = a.country.toLowerCase();
+                    valueB = b.country.toLowerCase();
+                    break;
+                case 'maxStation':
+                    valueA = a.maxStationName.toLowerCase();
+                    valueB = b.maxStationName.toLowerCase();
+                    break;
+                case 'maxValue':
+                    valueA = a.maxValue;
+                    valueB = b.maxValue;
+                    break;
+                case 'minStation':
+                    valueA = a.minStationName.toLowerCase();
+                    valueB = b.minStationName.toLowerCase();
+                    break;
+                case 'minValue':
+                    valueA = a.minValue;
+                    valueB = b.minValue;
+                    break;
+                case 'maxDate':
+                    valueA = new Date(this.formatDate(a.maxDate));
+                    valueB = new Date(this.formatDate(b.maxDate));
+                    break;
+                default:
+                    return 0;
+            }
+
+            let comparison = 0;
+            if (valueA > valueB) {
+                comparison = 1;
+            } else if (valueA < valueB) {
+                comparison = -1;
+            }
+
+            return this.tableSortState.direction === 'desc' ? -comparison : comparison;
+        });
+    }
+
+    formatDate(dateStr) {
+        // Convert YYYYMMDD to YYYY-MM-DD
+        if (dateStr.length === 8) {
+            return `${dateStr.slice(0, 4)}-${dateStr.slice(4, 6)}-${dateStr.slice(6, 8)}`;
+        }
+        return dateStr;
+    }
+
+    formatValue(value, element) {
+        if (value === null || value === undefined) return 'N/A';
+        
+        // Convert and format based on element type
+        const convertedValue = this.convertValue(value, element);
+        
+        if (element.startsWith('T')) { // Temperature
+            return `${convertedValue.toFixed(1)}°C`;
+        } else if (element.startsWith('P')) { // Precipitation
+            return `${convertedValue.toFixed(1)} mm`;
+        } else {
+            return convertedValue.toFixed(2);
+        }
+    }
+
     restoreBasicFiltersFromURL() {
         const urlParams = new URLSearchParams(window.location.search);
 
@@ -521,6 +836,11 @@ class NOAAWeatherVisualizer {
             this.zoomExtent = null; // Reset line chart zoom
             this.visualizeData(data, chartType, element);
             
+            // Load country stats for table if visible
+            if (this.showTable) {
+                await this.loadCountryStats();
+            }
+            
             // Also load and visualize world map data
             await this.loadAndVisualizeWorldMap(year, element);
         } catch (error) {
@@ -594,6 +914,11 @@ class NOAAWeatherVisualizer {
             
             const worldData = await response.json();
             this.createWorldMap(worldData, element, country, state);
+            
+            // Load country stats for table if visible (since table represents world map data)
+            if (this.showTable) {
+                await this.loadCountryStats();
+            }
         } catch (error) {
             console.error('Error loading world map data:', error);
             this.mapG.selectAll('*').remove();
@@ -994,6 +1319,20 @@ class NOAAWeatherVisualizer {
             aggregatedData.filter(d => d.date >= this.zoomExtent[0] && d.date <= this.zoomExtent[1]) :
             aggregatedData;
 
+        // Update currentData to reflect filtered data for table view
+        if (this.zoomExtent) {
+            // Convert aggregated data back to raw format for table display
+            const filteredRawData = data.filter(d => d.date >= this.zoomExtent[0] && d.date <= this.zoomExtent[1]);
+            this.currentData = filteredRawData;
+        } else {
+            this.currentData = data;
+        }
+
+        // Update table if visible
+        if (this.showTable) {
+            this.loadCountryStats();
+        }
+
         const x = d3.scaleTime()
             .domain(this.zoomExtent || d3.extent(aggregatedData, d => d.date))
             .range([0, this.width]);
@@ -1209,6 +1548,14 @@ class NOAAWeatherVisualizer {
     createBarChart(data, element) {
         const monthlyData = this.aggregateDataByMonth(data);
 
+        // Update currentData for table view
+        this.currentData = data;
+
+        // Update table if visible
+        if (this.showTable) {
+            this.loadCountryStats();
+        }
+
         const x = d3.scaleBand()
             .domain(monthlyData.map(d => d.month))
             .range([0, this.width])
@@ -1262,6 +1609,22 @@ class NOAAWeatherVisualizer {
                 d.month >= this.heatmapZoom.startMonth && d.month <= this.heatmapZoom.endMonth &&
                 d.day >= this.heatmapZoom.startDay && d.day <= this.heatmapZoom.endDay
             ) : heatmapData;
+
+        // Update currentData to reflect filtered data for table view
+        if (this.heatmapDateRange) {
+            // Filter raw data based on heatmap date range
+            const filteredRawData = data.filter(d => 
+                d.date >= this.heatmapDateRange.start && d.date <= this.heatmapDateRange.end
+            );
+            this.currentData = filteredRawData;
+        } else {
+            this.currentData = data;
+        }
+
+        // Update table if visible
+        if (this.showTable) {
+            this.loadCountryStats();
+        }
 
         // Adjust domains based on zoom
         const dayDomain = this.heatmapZoom ?

@@ -142,7 +142,7 @@ app.get('/api/locations/:year/:element', async (req, res) => {
                     countries: Array.from(countries).sort(),
                     states: Array.from(states).sort()
                 };
-                
+
                 console.log(`Locations API: ${country ? `filtered by country "${country}"` : 'no country filter'} - returning ${response.countries.length} countries, ${response.states.length} states`);
                 res.json(response);
             }
@@ -380,6 +380,114 @@ app.get('/api/world-data/:year/:element', async (req, res) => {
     } catch (error) {
         console.error('Server error getting world data:', error);
         res.status(500).json({ error: 'Server error getting world data' });
+    }
+});
+
+app.get('/api/country-stats/:year/:element', async (req, res) => {
+    const { year, element } = req.params;
+    const country = req.query.country; // Optional country filter
+    const state = req.query.state; // Optional state filter
+
+    try {
+        // Build geographic filter if needed
+        let geoFilter = '';
+        if (country || state) {
+            geoFilter = `
+                AND (
+                    ${country ? `c.name = '${country}'` : '1=1'}
+                    ${country && state ? ' AND ' : ''}
+                    ${state ? `states.name = '${state}'` : ''}
+                )
+            `;
+        }
+
+        // Add date range filter if provided
+        let dateFilter = '';
+        if (req.query.startDate && req.query.endDate) {
+            dateFilter = `AND DATE >= '${req.query.startDate.replace(/-/g, '')}' AND DATE <= '${req.query.endDate.replace(/-/g, '')}'`;
+        }
+
+        const query = `
+            WITH station_data AS (
+                SELECT 
+                    w.ID as station_id,
+                    w.DATE as date,
+                    CAST(w.DATA_VALUE AS DOUBLE) as value,
+                    st.name as station_name,
+                    c.name as country_name,
+                    states.name as state_name
+                FROM read_parquet('/Users/xevix/Downloads/data/noaa/by_year/YEAR=${year}/ELEMENT=${element}/*.parquet') w
+                LEFT JOIN read_parquet('/Users/xevix/Downloads/data/noaa/ghcnd-stations.parquet') st
+                    ON w.ID = st.id
+                LEFT JOIN read_parquet('/Users/xevix/Downloads/data/noaa/ghcnd-countries.parquet') c
+                    ON SUBSTRING(w.ID, 1, 2) = c.s
+                LEFT JOIN read_parquet('/Users/xevix/Downloads/data/noaa/ghcnd-states.parquet') states
+                    ON st.st = states.st
+                WHERE w.DATA_VALUE IS NOT NULL 
+                    AND w.DATA_VALUE != -9999
+                    AND c.name IS NOT NULL
+                    ${geoFilter}
+                    ${dateFilter}
+            ),
+            country_max_values AS (
+                SELECT DISTINCT ON (country_name) 
+                    country_name,
+                    station_id as max_station_id,
+                    station_name as max_station_name,
+                    value as max_value,
+                    date as max_date
+                FROM station_data
+                ORDER BY country_name, value DESC, date DESC
+            ),
+            country_min_values AS (
+                SELECT DISTINCT ON (country_name) 
+                    country_name,
+                    station_id as min_station_id,
+                    station_name as min_station_name,
+                    value as min_value,
+                    date as min_date
+                FROM station_data
+                ORDER BY country_name, value ASC, date DESC
+            )
+            SELECT 
+                max_vals.country_name,
+                max_vals.max_station_id,
+                COALESCE(max_vals.max_station_name, max_vals.max_station_id) as max_station_name,
+                max_vals.max_value,
+                max_vals.max_date,
+                min_vals.min_station_id,
+                COALESCE(min_vals.min_station_name, min_vals.min_station_id) as min_station_name,
+                min_vals.min_value,
+                min_vals.min_date
+            FROM country_max_values max_vals
+            JOIN country_min_values min_vals ON max_vals.country_name = min_vals.country_name
+            ORDER BY max_vals.max_value DESC, max_vals.country_name
+        `;
+
+        connection.all(query, (err, result) => {
+            if (err) {
+                console.error('Database error getting country stats:', err);
+                res.status(500).json({ error: 'Failed to get country statistics' });
+            } else {
+                const countryStats = result.map(row => ({
+                    country: String(row.country_name),
+                    maxStationId: String(row.max_station_id),
+                    maxStationName: String(row.max_station_name || row.max_station_id),
+                    maxValue: Number(row.max_value),
+                    maxDate: String(row.max_date),
+                    minStationId: String(row.min_station_id),
+                    minStationName: String(row.min_station_name || row.min_station_id),
+                    minValue: Number(row.min_value),
+                    minDate: String(row.min_date)
+                }));
+
+                console.log(`Found ${countryStats.length} country statistics for ${year}/${element}`);
+                res.json(countryStats);
+            }
+        });
+    } catch (error) {
+        console.error('Server error getting country stats:', error);
+        res.status(500).json({ error: 'Server error getting country statistics' });
     }
 });
 
