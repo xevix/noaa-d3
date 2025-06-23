@@ -934,6 +934,31 @@ class NOAAWeatherVisualizer {
         }
     }
 
+    // Utility to normalize country names between map and data
+    normalizeCountryName(name) {
+        const mapping = {
+            "United States of America": "United States",
+            "Russia": "Russian Federation",
+            "Czechia": "Czech Republic",
+            "South Korea": "Korea, Republic of",
+            "North Korea": "Korea, Democratic People's Republic of",
+            "Iran": "Iran, Islamic Republic of",
+            "Vietnam": "Viet Nam",
+            "Syria": "Syrian Arab Republic",
+            "Laos": "Lao People's Democratic Republic",
+            "Moldova": "Moldova, Republic of",
+            "Venezuela": "Venezuela, Bolivarian Republic of",
+            "Tanzania": "Tanzania, United Republic of",
+            "Bolivia": "Bolivia, Plurinational State of",
+            "Brunei": "Brunei Darussalam",
+            "Ivory Coast": "Côte d'Ivoire",
+            "Congo": "Congo, Republic of the",
+            "Democratic Republic of the Congo": "Congo, Democratic Republic of the",
+            // Add more as needed
+        };
+        return mapping[name] || name;
+    }
+
     createWorldMap(worldData, element, selectedCountry, selectedState) {
         // Clear existing map
         this.mapG.selectAll('*').remove();
@@ -976,41 +1001,43 @@ class NOAAWeatherVisualizer {
             .attr('d', path)
             .attr('fill', d => {
                 const countryName = d.properties.NAME || d.properties.name;
-                
+                const normalizedCountryName = this.normalizeCountryName(countryName);
                 // If a country is selected, dim other countries
-                if (selectedCountry && countryName !== selectedCountry) {
+                if (selectedCountry && normalizedCountryName !== selectedCountry) {
                     return '#e9ecef'; // Light gray for non-selected countries
                 }
-                
-                const value = dataLookup.get(countryName);
+                const value = dataLookup.get(normalizedCountryName);
                 return value !== undefined ? colorScale(value) : '#f0f0f0';
             })
             .attr('stroke', d => {
                 const countryName = d.properties.NAME || d.properties.name;
+                const normalizedCountryName = this.normalizeCountryName(countryName);
                 // Highlight the selected country with a thicker border
-                return (selectedCountry && countryName === selectedCountry) ? '#333' : '#666';
+                return (selectedCountry && normalizedCountryName === selectedCountry) ? '#333' : '#666';
             })
             .attr('stroke-width', d => {
                 const countryName = d.properties.NAME || d.properties.name;
+                const normalizedCountryName = this.normalizeCountryName(countryName);
                 // Thicker border for selected country
-                return (selectedCountry && countryName === selectedCountry) ? 2 : 0.5;
+                return (selectedCountry && normalizedCountryName === selectedCountry) ? 2 : 0.5;
             })
             .style('cursor', 'pointer')
             .on('click', (_, d) => {
                 const countryName = d.properties.NAME || d.properties.name;
+                const normalizedCountryName = this.normalizeCountryName(countryName);
                 const countrySelect = document.getElementById('country-select');
                 const stateSelect = document.getElementById('state-select');
 
-                if (countrySelect.value === countryName) {
+                if (countrySelect.value === normalizedCountryName) {
                     // If clicking the selected country, deselect it
                     countrySelect.value = '';
                 } else {
                     // Otherwise, try to select the new country
-                    const countryExists = Array.from(countrySelect.options).some(opt => opt.value === countryName);
+                    const countryExists = Array.from(countrySelect.options).some(opt => opt.value === normalizedCountryName);
                     if (countryExists) {
-                        countrySelect.value = countryName;
+                        countrySelect.value = normalizedCountryName;
                     } else {
-                        console.warn(`Country "${countryName}" not available for the current filters.`);
+                        console.warn(`Country "${normalizedCountryName}" not available for the current filters.`);
                         return; // Exit if country is not valid
                     }
                 }
@@ -1022,18 +1049,16 @@ class NOAAWeatherVisualizer {
             })
             .on('mouseover', (event, d) => {
                 const countryName = d.properties.NAME || d.properties.name;
-                
+                const normalizedCountryName = this.normalizeCountryName(countryName);
                 // Don't show tooltip for dimmed countries when a country is selected
-                if (selectedCountry && countryName !== selectedCountry) {
+                if (selectedCountry && normalizedCountryName !== selectedCountry) {
                     return;
                 }
-                
-                const value = dataLookup.get(countryName);
+                const value = dataLookup.get(normalizedCountryName);
                 const tooltipContent = `
                     <strong>${countryName}</strong><br/>
                     ${this.getValueLabel(element)}: ${value !== undefined ? value.toFixed(2) : 'No data'}
                 `;
-                
                 this.tooltip
                     .style('opacity', 1)
                     .html(tooltipContent)
