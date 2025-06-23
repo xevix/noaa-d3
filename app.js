@@ -1872,6 +1872,7 @@ SELECT
 FROM read_parquet('/Users/xevix/Downloads/data/noaa/by_year/YEAR=${year}/ELEMENT=${element}/*.parquet')
 WHERE DATA_VALUE IS NOT NULL 
     AND DATA_VALUE != -9999
+    AND (Q_FLAG IS NULL OR Q_FLAG != 'X')
     AND ID = '${station}'
     ${geoFilter}
 ORDER BY DATE
@@ -1888,6 +1889,7 @@ WITH daily_averages AS (
     FROM read_parquet('/Users/xevix/Downloads/data/noaa/by_year/YEAR=${year}/ELEMENT=${element}/*.parquet')
     WHERE DATA_VALUE IS NOT NULL 
         AND DATA_VALUE != -9999
+        AND (Q_FLAG IS NULL OR Q_FLAG != 'X')
         ${geoFilter}
     GROUP BY DATE
     HAVING COUNT(*) >= 1

@@ -250,6 +250,7 @@ app.get('/api/world-data/:year/:element', async (req, res) => {
             let whereClauses = [
                 `w.DATA_VALUE IS NOT NULL`,
                 `w.DATA_VALUE != -9999`,
+                `(w.Q_FLAG IS NULL OR w.Q_FLAG != 'X')`,
                 `c.name IS NOT NULL`,
                 `states.name IS NOT NULL`,
                 `states.name = '${selectedState}'`
@@ -306,6 +307,7 @@ app.get('/api/world-data/:year/:element', async (req, res) => {
                     ON st.st = states.st
                 WHERE w.DATA_VALUE IS NOT NULL 
                     AND w.DATA_VALUE != -9999
+                    AND (w.Q_FLAG IS NULL OR w.Q_FLAG != 'X')
                     AND c.name IS NOT NULL
                     AND states.name IS NOT NULL
                     AND c.name = '${selectedCountry}'
@@ -326,6 +328,7 @@ app.get('/api/world-data/:year/:element', async (req, res) => {
                     ON SUBSTRING(w.ID, 1, 2) = c.s
                 WHERE w.DATA_VALUE IS NOT NULL 
                     AND w.DATA_VALUE != -9999
+                    AND (w.Q_FLAG IS NULL OR w.Q_FLAG != 'X')
                     AND c.name IS NOT NULL
                     AND c.name = '${selectedCountry}'
                     ${dateFilter}
@@ -353,6 +356,7 @@ app.get('/api/world-data/:year/:element', async (req, res) => {
                     ON SUBSTRING(w.ID, 1, 2) = c.s
                 WHERE w.DATA_VALUE IS NOT NULL 
                     AND w.DATA_VALUE != -9999
+                    AND (w.Q_FLAG IS NULL OR w.Q_FLAG != 'X')
                     AND c.name IS NOT NULL
                     ${dateFilter}
                 GROUP BY c.name
@@ -425,6 +429,7 @@ app.get('/api/country-stats/:year/:element', async (req, res) => {
                     ON st.st = states.st
                 WHERE w.DATA_VALUE IS NOT NULL 
                     AND w.DATA_VALUE != -9999
+                    AND (w.Q_FLAG IS NULL OR w.Q_FLAG != 'X')
                     AND c.name IS NOT NULL
                     ${geoFilter}
                     ${dateFilter}
@@ -528,6 +533,7 @@ app.get('/api/weather/:year/:element', async (req, res) => {
             FROM read_parquet('/Users/xevix/Downloads/data/noaa/by_year/YEAR=${year}/ELEMENT=${element}/*.parquet')
             WHERE DATA_VALUE IS NOT NULL 
                 AND DATA_VALUE != -9999
+                AND (Q_FLAG IS NULL OR Q_FLAG != 'X')
                 AND ID = '${station}'
                 ${geoFilter}
             ORDER BY DATE
@@ -544,6 +550,7 @@ app.get('/api/weather/:year/:element', async (req, res) => {
                 FROM read_parquet('/Users/xevix/Downloads/data/noaa/by_year/YEAR=${year}/ELEMENT=${element}/*.parquet')
                 WHERE DATA_VALUE IS NOT NULL 
                     AND DATA_VALUE != -9999
+                    AND (Q_FLAG IS NULL OR Q_FLAG != 'X')
                     ${geoFilter}
                 GROUP BY DATE
                 ORDER BY DATE
