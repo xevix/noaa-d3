@@ -884,12 +884,16 @@ class NOAAWeatherVisualizer {
     }
 
     async loadAndVisualizeData() {
+        // Clear any error message or overlay before starting a new load
+        this.clearErrorMessage && this.clearErrorMessage();
+        if (this.g && this.g.selectAll) {
+            this.g.selectAll('*').remove();
+        }
         const year = document.getElementById('year-select').value;
         const element = document.getElementById('element-select').value;
         const chartType = document.getElementById('chart-type').value;
         const station = document.getElementById('station-select').value;
-        this.g.selectAll('*').remove();
-        this.showLoadingDelayed('loading');
+        this.showLoadingImmediate('loading'); // Show immediately for downloading
         this.setLoadingMessage(`Downloading data for YEAR=${year}, ELEMENT=${element}...`);
         const refreshBtn = document.getElementById('load-data');
         const originalBtnText = refreshBtn.innerHTML;
@@ -2089,6 +2093,29 @@ LIMIT 1000;
         const loadingText = document.querySelector('#loading .loading-text');
         if (loadingText) {
             loadingText.textContent = msg;
+        }
+    }
+
+    // Add a clearErrorMessage method to remove error overlays
+    clearErrorMessage() {
+        // Remove error message from the chart area
+        if (this.g && this.g.selectAll) {
+            this.g.selectAll('text').filter(function() {
+                return this.textContent && this.textContent.includes('Failed to initialize application') || this.textContent.includes('Click "🔄 Refresh" to load weather data') || this.textContent.includes('Error loading data');
+            }).remove();
+        }
+    }
+
+    showLoadingImmediate(elementId) {
+        // Immediately show the loading spinner for the given element
+        const element = document.getElementById(elementId);
+        if (element) {
+            element.style.display = 'block';
+        }
+        // Also clear any pending delayed loading timers for this element
+        if (this.loadingTimers.has(elementId)) {
+            clearTimeout(this.loadingTimers.get(elementId));
+            this.loadingTimers.delete(elementId);
         }
     }
 }

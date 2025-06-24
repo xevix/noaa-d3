@@ -21,6 +21,21 @@ const S3_PREFIX = 'parquet/by_year';
 
 const AVAILABLE_CACHE_FILE = path.join(LOCAL_DATA_ROOT, 'available_year_elements.json');
 
+// Helper to profile DuckDB queries
+function profileQuery(method, sql, ...args) {
+    const start = Date.now();
+    console.log(`[DuckDB] QUERY START (${method}):`, sql);
+    const cb = args[args.length - 1];
+    const wrappedCb = function (...cbArgs) {
+        const end = Date.now();
+        const duration = end - start;
+        console.log(`[DuckDB] QUERY END (${method}): took ${duration} ms`);
+        cb(...cbArgs);
+    };
+    args[args.length - 1] = wrappedCb;
+    return connection[method](sql, ...args);
+}
+
 async function ensureLocalData(year, element) {
     // Always use DuckDB COPY to download S3 parquet files to local, then query locally
     const localDir = path.join(LOCAL_DATA_ROOT, `by_year/YEAR=${year}/ELEMENT=${element}`);
@@ -43,7 +58,7 @@ async function ensureLocalData(year, element) {
     }
     try {
         await new Promise((resolve, reject) => {
-            connection.run(
+            profileQuery('run',
                 `COPY (SELECT * FROM read_parquet('${s3ParquetPath}')) TO '${localParquetFile}' (FORMAT PARQUET, PARQUET_VERSION 'V2', COMPRESSION 'ZSTD');`,
                 (err) => {
                     if (err) reject(err); else resolve();
@@ -131,7 +146,7 @@ app.get('/api/stations/:year/:element', async (req, res) => {
             LIMIT 1000
         `;
 
-        connection.all(query, (err, result) => {
+        profileQuery('all', query, (err, result) => {
             if (err) {
                 console.error('Database error getting stations:', err);
                 res.status(500).json({ error: 'Failed to get available stations' });
@@ -201,7 +216,7 @@ app.get('/api/locations/:year/:element', async (req, res) => {
             SELECT 'state' as type, state_name as name FROM filtered_states WHERE state_name IS NOT NULL
         `;
 
-        connection.all(query, (err, result) => {
+        profileQuery('all', query, (err, result) => {
             if (err) {
                 console.error('Database error getting locations:', err);
                 res.status(500).json({ error: 'Failed to get available locations' });
@@ -249,7 +264,7 @@ async function loadOrCreateAvailableYearElementsCache() {
         REGEXP_EXTRACT(file, 'ELEMENT=([A-Z0-9]+)', 1) AS element
     FROM glob('${s3Glob}')`;
     return new Promise((resolve, reject) => {
-        connection.all(sql, (err, rows) => {
+        profileQuery('all', sql, (err, rows) => {
             if (err) {
                 console.error('DuckDB S3 year/element query failed:', err);
                 reject(err);
@@ -299,7 +314,7 @@ app.get('/api/elements/:year', async (req, res) => {
             FROM read_csv('${csvPath}', header=true)
             WHERE Element IN (${elements.map(name => `'${name}'`).join(', ')})
         `;
-        connection.all(query, (err, descriptions) => {
+        profileQuery('all', query, (err, descriptions) => {
             res.set('X-Noaa-Cache', usedCache ? 'hit' : 'miss');
             if (err) {
                 console.error('Error reading element descriptions:', err);
@@ -464,7 +479,7 @@ app.get('/api/world-data/:year/:element', async (req, res) => {
             `;
         }
 
-        connection.all(query, (err, result) => {
+        profileQuery('all', query, (err, result) => {
             if (err) {
                 console.error('Database error getting world data:', err);
                 res.status(500).json({ error: 'Failed to get world data' });
@@ -575,7 +590,7 @@ app.get('/api/country-stats/:year/:element', async (req, res) => {
             ORDER BY max_vals.max_value DESC, max_vals.country_name
         `;
 
-        connection.all(query, (err, result) => {
+        profileQuery('all', query, (err, result) => {
             if (err) {
                 console.error('Database error getting country stats:', err);
                 res.status(500).json({ error: 'Failed to get country statistics' });
@@ -680,7 +695,7 @@ app.get('/api/weather/:year/:element', async (req, res) => {
 
         console.log('Query: ', query);
 
-        connection.all(query, (err, result) => {
+        profileQuery('all', query, (err, result) => {
             if (err) {
                 console.error('Database error:', err);
                 res.status(500).json({ error: 'Database query failed' });
