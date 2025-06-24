@@ -2,6 +2,8 @@
 
 A D3.js-based web application for visualizing NOAA weather data stored in Parquet files using DuckDB for efficient querying.
 
+Data is sourced from [NOAA via AWS S3](https://registry.opendata.aws/noaa-ghcn/). NOAA data disseminated through NODD is made available under the [Creative Commons 1.0 Universal Public Domain Dedication (CC0-1.0) license](https://creativecommons.org/publicdomain/zero/1.0/?ref=chooser-v1%5C), which is well-known and internationally recognized. There are no restrictions on the use of the data. The data are open to the public and can be used as desired.
+
 ## Features
 
 - **Interactive Data Visualization**: View weather data through line charts, bar charts, and heat maps
