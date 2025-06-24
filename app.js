@@ -1932,10 +1932,10 @@ class NOAAWeatherVisualizer {
             geoFilter = `
                 AND ID IN (
                     SELECT st.id 
-                    FROM read_parquet('/Users/xevix/Downloads/data/noaa/ghcnd-stations.parquet') st
-                    LEFT JOIN read_parquet('/Users/xevix/Downloads/data/noaa/ghcnd-countries.parquet') c
+                    FROM read_parquet('data/ghcnd-stations.parquet') st
+                    LEFT JOIN read_parquet('data/ghcnd-countries.parquet') c
                         ON SUBSTRING(st.id, 1, 2) = c.s
-                    LEFT JOIN read_parquet('/Users/xevix/Downloads/data/noaa/ghcnd-states.parquet') states
+                    LEFT JOIN read_parquet('data/ghcnd-states.parquet') states
                         ON st.st = states.st
                     WHERE 1=1
                     ${country ? `AND c.name = '${country}'` : ''}
@@ -1952,7 +1952,7 @@ SELECT
     EXTRACT(MONTH FROM STRPTIME(DATE, '%Y%m%d')) as month,
     EXTRACT(DAY FROM STRPTIME(DATE, '%Y%m%d')) as day,
     EXTRACT(YEAR FROM STRPTIME(DATE, '%Y%m%d')) as year
-FROM read_parquet('/Users/xevix/Downloads/data/noaa/by_year/YEAR=${year}/ELEMENT=${element}/*.parquet')
+FROM read_parquet('data/by_year/YEAR=${year}/ELEMENT=${element}/*.parquet')
 WHERE DATA_VALUE IS NOT NULL 
     AND DATA_VALUE != -9999
     AND (Q_FLAG IS NULL OR Q_FLAG != 'X')
@@ -1969,7 +1969,7 @@ WITH daily_averages AS (
         EXTRACT(MONTH FROM STRPTIME(DATE, '%Y%m%d')) as month,
         EXTRACT(DAY FROM STRPTIME(DATE, '%Y%m%d')) as day,
         EXTRACT(YEAR FROM STRPTIME(DATE, '%Y%m%d')) as year
-    FROM read_parquet('/Users/xevix/Downloads/data/noaa/by_year/YEAR=${year}/ELEMENT=${element}/*.parquet')
+    FROM read_parquet('data/by_year/YEAR=${year}/ELEMENT=${element}/*.parquet')
     WHERE DATA_VALUE IS NOT NULL 
         AND DATA_VALUE != -9999
         AND (Q_FLAG IS NULL OR Q_FLAG != 'X')
@@ -2038,7 +2038,7 @@ LIMIT 5000;
         const query = `
 WITH available_stations AS (
     SELECT DISTINCT ID as station_id
-    FROM read_parquet('/Users/xevix/Downloads/data/noaa/by_year/YEAR=${year}/ELEMENT=${element}/*.parquet')
+    FROM read_parquet('data/by_year/YEAR=${year}/ELEMENT=${element}/*.parquet')
     WHERE ID IS NOT NULL
 )
 SELECT 
@@ -2047,11 +2047,11 @@ SELECT
     c.name as country_name,
     states.name as state_name
 FROM available_stations s
-LEFT JOIN read_parquet('/Users/xevix/Downloads/data/noaa/ghcnd-stations.parquet') st
+LEFT JOIN read_parquet('data/ghcnd-stations.parquet') st
     ON s.station_id = st.id
-LEFT JOIN read_parquet('/Users/xevix/Downloads/data/noaa/ghcnd-countries.parquet') c
+LEFT JOIN read_parquet('data/ghcnd-countries.parquet') c
     ON SUBSTRING(s.station_id, 1, 2) = c.s
-LEFT JOIN read_parquet('/Users/xevix/Downloads/data/noaa/ghcnd-states.parquet') states
+LEFT JOIN read_parquet('data/ghcnd-states.parquet') states
     ON st.st = states.st
 WHERE st.name IS NOT NULL
     ${geoFilter}

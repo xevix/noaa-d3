@@ -30,3 +30,6 @@ pids
 *.pid
 *.seed
 *.pid.lock
+
+# Data
+data/

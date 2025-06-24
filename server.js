@@ -2,12 +2,77 @@ const express = require('express');
 const path = require('path');
 const fs = require('fs');
 const duckdb = require('duckdb');
+const { S3Client, ListObjectsV2Command, GetObjectCommand } = require('@aws-sdk/client-s3');
+const { UNSIGNED } = require('@aws-sdk/s3-request-presigner');
 
 const app = express();
 const port = 3000;
 
 const db = new duckdb.Database(':memory:');
 const connection = db.connect();
+
+const s3 = new S3Client({
+    region: 'us-east-1',
+    credentials: UNSIGNED
+});
+const LOCAL_DATA_ROOT = path.join(__dirname, 'data');
+const S3_BUCKET = 'noaa-ghcn-pds';
+const S3_PREFIX = 'parquet/by_year';
+
+async function ensureLocalData(year, element) {
+    // Always use DuckDB COPY to download S3 parquet files to local, then query locally
+    const localDir = path.join(LOCAL_DATA_ROOT, `by_year/YEAR=${year}/ELEMENT=${element}`);
+    if (!fs.existsSync(localDir)) {
+        fs.mkdirSync(localDir, { recursive: true });
+    }
+    const s3ParquetPath = `s3://${S3_BUCKET}/${S3_PREFIX}/YEAR=${year}/ELEMENT=${element}/*.parquet`;
+    const localParquetFile = path.join(localDir, 'data.parquet');
+    // If the local file exists and is non-empty, use it
+    if (fs.existsSync(localParquetFile) && fs.statSync(localParquetFile).size > 0) {
+        return localParquetFile;
+    }
+    // Remove any existing local parquet files first (to avoid partial/corrupt data)
+    if (fs.existsSync(localDir)) {
+        for (const file of fs.readdirSync(localDir)) {
+            if (file.endsWith('.parquet')) {
+                fs.unlinkSync(path.join(localDir, file));
+            }
+        }
+    }
+    try {
+        await new Promise((resolve, reject) => {
+            connection.run(
+                `COPY (SELECT * FROM read_parquet('${s3ParquetPath}')) TO '${localParquetFile}' (FORMAT PARQUET, PARQUET_VERSION 'V2', COMPRESSION 'ZSTD');`,
+                (err) => {
+                    if (err) reject(err); else resolve();
+                }
+            );
+        });
+        if (!fs.existsSync(localParquetFile) || fs.statSync(localParquetFile).size === 0) {
+            throw new Error('DuckDB COPY did not produce a local parquet file');
+        }
+        return localParquetFile;
+    } catch (copyErr) {
+        console.error(`[DuckDB COPY failed] for ${year}/${element}:`, copyErr.message || copyErr);
+        throw new Error(`No parquet files found for year=${year}, element=${element}. Data may be missing or download failed.`);
+    }
+}
+
+// Helper for lookup tables (stations, countries, states, etc.)
+async function ensureLocalLookupFile(filename, s3Subpath) {
+    const localPath = path.join(LOCAL_DATA_ROOT, filename);
+    if (!fs.existsSync(localPath)) {
+        const getParams = { Bucket: S3_BUCKET, Key: s3Subpath };
+        const fileStream = fs.createWriteStream(localPath);
+        const { Body } = await s3.send(new GetObjectCommand(getParams));
+        await new Promise((resolve, reject) => {
+            Body.pipe(fileStream)
+                .on('error', reject)
+                .on('close', resolve);
+        });
+    }
+    return localPath;
+}
 
 app.use(express.static('.'));
 app.use(express.json());
@@ -22,6 +87,12 @@ app.get('/api/stations/:year/:element', async (req, res) => {
     const state = req.query.state; // Optional state filter
 
     try {
+        // Ensure data is present
+        const dataPath = await ensureLocalData(year, element);
+        const stationsPath = await ensureLocalLookupFile('ghcnd-stations.parquet', 'parquet/ghcnd-stations.parquet');
+        const countriesPath = await ensureLocalLookupFile('ghcnd-countries.parquet', 'parquet/ghcnd-countries.parquet');
+        const statesPath = await ensureLocalLookupFile('ghcnd-states.parquet', 'parquet/ghcnd-states.parquet');
+
         // Build geographic filter if needed
         let geoFilter = '';
         if (country || state) {
@@ -37,7 +108,7 @@ app.get('/api/stations/:year/:element', async (req, res) => {
         const query = `
             WITH available_stations AS (
                 SELECT DISTINCT ID as station_id
-                FROM read_parquet('/Users/xevix/Downloads/data/noaa/by_year/YEAR=${year}/ELEMENT=${element}/*.parquet')
+                FROM read_parquet('${dataPath}')
                 WHERE ID IS NOT NULL
             )
             SELECT 
@@ -46,11 +117,11 @@ app.get('/api/stations/:year/:element', async (req, res) => {
                 c.name as country_name,
                 states.name as state_name
             FROM available_stations s
-            LEFT JOIN read_parquet('/Users/xevix/Downloads/data/noaa/ghcnd-stations.parquet') st
+            LEFT JOIN read_parquet('${stationsPath}') st
                 ON s.station_id = st.id
-            LEFT JOIN read_parquet('/Users/xevix/Downloads/data/noaa/ghcnd-countries.parquet') c
+            LEFT JOIN read_parquet('${countriesPath}') c
                 ON SUBSTRING(s.station_id, 1, 2) = c.s
-            LEFT JOIN read_parquet('/Users/xevix/Downloads/data/noaa/ghcnd-states.parquet') states
+            LEFT JOIN read_parquet('${statesPath}') states
                 ON st.st = states.st
             WHERE st.name IS NOT NULL
                 ${geoFilter}
@@ -85,11 +156,17 @@ app.get('/api/locations/:year/:element', async (req, res) => {
     const country = req.query.country; // Optional country filter
 
     try {
+        // Ensure data is present
+        const dataPath = await ensureLocalData(year, element);
+        const stationsPath = await ensureLocalLookupFile('ghcnd-stations.parquet', 'parquet/ghcnd-stations.parquet');
+        const countriesPath = await ensureLocalLookupFile('ghcnd-countries.parquet', 'parquet/ghcnd-countries.parquet');
+        const statesPath = await ensureLocalLookupFile('ghcnd-states.parquet', 'parquet/ghcnd-states.parquet');
+
         // Get available countries and states for this year/element using lookup tables
         const query = `
             WITH available_stations AS (
                 SELECT DISTINCT ID as station_id
-                FROM read_parquet('/Users/xevix/Downloads/data/noaa/by_year/YEAR=${year}/ELEMENT=${element}/*.parquet')
+                FROM read_parquet('${dataPath}')
                 WHERE ID IS NOT NULL
             ),
             station_locations AS (
@@ -98,11 +175,11 @@ app.get('/api/locations/:year/:element', async (req, res) => {
                     c.name as country_name,
                     states.name as state_name
                 FROM available_stations s
-                LEFT JOIN read_parquet('/Users/xevix/Downloads/data/noaa/ghcnd-stations.parquet') st
+                LEFT JOIN read_parquet('${stationsPath}') st
                     ON s.station_id = st.id
-                LEFT JOIN read_parquet('/Users/xevix/Downloads/data/noaa/ghcnd-countries.parquet') c
+                LEFT JOIN read_parquet('${countriesPath}') c
                     ON SUBSTRING(s.station_id, 1, 2) = c.s
-                LEFT JOIN read_parquet('/Users/xevix/Downloads/data/noaa/ghcnd-states.parquet') states
+                LEFT JOIN read_parquet('${statesPath}') states
                     ON st.st = states.st
                 WHERE c.name IS NOT NULL
             ),
@@ -157,13 +234,31 @@ app.get('/api/elements/:year', async (req, res) => {
     const { year } = req.params;
 
     try {
-        const yearDir = `/Users/xevix/Downloads/data/noaa/by_year/YEAR=${year}`;
-
-        // Check if year directory exists
+        const yearDir = path.join(LOCAL_DATA_ROOT, `by_year/YEAR=${year}`);
+        // Download at least one element to ensure year dir exists (or check S3 for available elements)
         if (!fs.existsSync(yearDir)) {
-            return res.status(404).json({ error: 'Year not found' });
+            // Download the list of elements for this year from S3
+            const s3Prefix = `${S3_PREFIX}/YEAR=${year}/`;
+            const listParams = {
+                Bucket: S3_BUCKET,
+                Prefix: s3Prefix,
+                Delimiter: '/'
+            };
+            const listedObjects = await s3.send(new ListObjectsV2Command(listParams));
+            const elementDirs = listedObjects.CommonPrefixes
+                ? listedObjects.CommonPrefixes.map(cp => cp.Prefix.split('/').filter(Boolean).pop())
+                : [];
+            if (elementDirs.length === 0) {
+                return res.status(404).json({ error: 'Year not found' });
+            }
+            fs.mkdirSync(yearDir, { recursive: true });
+            // Create empty element dirs locally for UI listing
+            for (const dir of elementDirs) {
+                if (dir.startsWith('ELEMENT=')) {
+                    fs.mkdirSync(path.join(yearDir, dir), { recursive: true });
+                }
+            }
         }
-
         // Read element directories and extract element names
         const elementNames = fs.readdirSync(yearDir, { withFileTypes: true })
             .filter(dirent => dirent.isDirectory())
@@ -173,7 +268,7 @@ app.get('/api/elements/:year', async (req, res) => {
             .sort();
 
         // Get element descriptions from CSV
-        const csvPath = '/Users/xevix/Downloads/data/noaa/complete_element_descriptions.csv';
+        const csvPath = await ensureLocalLookupFile('complete_element_descriptions.csv', 'parquet/complete_element_descriptions.csv');
         const query = `
             SELECT Element, Description, Unit
             FROM read_csv('${csvPath}', header=true)
@@ -216,20 +311,31 @@ app.get('/api/elements/:year', async (req, res) => {
 
 app.get('/api/years', async (_, res) => {
     try {
-        const dataDir = '/Users/xevix/Downloads/data/noaa/by_year';
-
-        // Read directory names and extract years
-        const dirNames = fs.readdirSync(dataDir, { withFileTypes: true })
-            .filter(dirent => dirent.isDirectory())
-            .map(dirent => dirent.name)
-            .filter(name => name.startsWith('YEAR='))
-            .map(name => parseInt(name.split('=')[1]))
-            .filter(year => !isNaN(year))
-            .sort((a, b) => b - a); // Sort descending (newest first)
-
-        // console.log(`Found ${dirNames.length} years available:`, dirNames.slice(0, 10), dirNames.length > 10 ? '...' : '');
+        const dataDir = path.join(LOCAL_DATA_ROOT, 'by_year');
+        // If not present locally, list from S3
+        let dirNames = [];
+        if (!fs.existsSync(dataDir)) {
+            // List years from S3
+            const listParams = {
+                Bucket: S3_BUCKET,
+                Prefix: `${S3_PREFIX}/`,
+                Delimiter: '/'
+            };
+            const listedObjects = await s3.send(new ListObjectsV2Command(listParams));
+            dirNames = listedObjects.CommonPrefixes
+                ? listedObjects.CommonPrefixes.map(cp => cp.Prefix.split('/').filter(Boolean).pop())
+                : [];
+            dirNames = dirNames.filter(name => name.startsWith('YEAR=')).map(name => parseInt(name.split('=')[1])).filter(year => !isNaN(year)).sort((a, b) => b - a);
+        } else {
+            dirNames = fs.readdirSync(dataDir, { withFileTypes: true })
+                .filter(dirent => dirent.isDirectory())
+                .map(dirent => dirent.name)
+                .filter(name => name.startsWith('YEAR='))
+                .map(name => parseInt(name.split('=')[1]))
+                .filter(year => !isNaN(year))
+                .sort((a, b) => b - a); // Sort descending (newest first)
+        }
         res.json(dirNames);
-
     } catch (error) {
         console.error('Server error getting years:', error);
         res.status(500).json({ error: 'Server error getting years' });
@@ -243,6 +349,12 @@ app.get('/api/world-data/:year/:element', async (req, res) => {
     const { startDate, endDate } = req.query;
 
     try {
+        // Ensure data is present
+        const dataPath = await ensureLocalData(year, element);
+        const stationsPath = await ensureLocalLookupFile('ghcnd-stations.parquet', 'parquet/ghcnd-stations.parquet');
+        const countriesPath = await ensureLocalLookupFile('ghcnd-countries.parquet', 'parquet/ghcnd-countries.parquet');
+        const statesPath = await ensureLocalLookupFile('ghcnd-states.parquet', 'parquet/ghcnd-states.parquet');
+
         let query;
         if (selectedState) {
             // When a state is selected, show data for that specific state.
@@ -271,12 +383,12 @@ app.get('/api/world-data/:year/:element', async (req, res) => {
                     c.name as parent,
                     AVG(CAST(w.DATA_VALUE AS DOUBLE)) as avg_value,
                     COUNT(*) as data_points
-                FROM read_parquet('/Users/xevix/Downloads/data/noaa/by_year/YEAR=${year}/ELEMENT=${element}/*.parquet') w
-                LEFT JOIN read_parquet('/Users/xevix/Downloads/data/noaa/ghcnd-stations.parquet') st
+                FROM read_parquet('${dataPath}') w
+                LEFT JOIN read_parquet('${stationsPath}') st
                     ON w.ID = st.id
-                LEFT JOIN read_parquet('/Users/xevix/Downloads/data/noaa/ghcnd-countries.parquet') c
+                LEFT JOIN read_parquet('${countriesPath}') c
                     ON SUBSTRING(w.ID, 1, 2) = c.s
-                LEFT JOIN read_parquet('/Users/xevix/Downloads/data/noaa/ghcnd-states.parquet') states
+                LEFT JOIN read_parquet('${statesPath}') states
                     ON st.st = states.st
                 WHERE ${whereClauses.join(' AND ')}
                 GROUP BY c.name, states.name
@@ -298,12 +410,12 @@ app.get('/api/world-data/:year/:element', async (req, res) => {
                     c.name as parent,
                     AVG(CAST(w.DATA_VALUE AS DOUBLE)) as avg_value,
                     COUNT(*) as data_points
-                FROM read_parquet('/Users/xevix/Downloads/data/noaa/by_year/YEAR=${year}/ELEMENT=${element}/*.parquet') w
-                LEFT JOIN read_parquet('/Users/xevix/Downloads/data/noaa/ghcnd-stations.parquet') st
+                FROM read_parquet('${dataPath}') w
+                LEFT JOIN read_parquet('${stationsPath}') st
                     ON w.ID = st.id
-                LEFT JOIN read_parquet('/Users/xevix/Downloads/data/noaa/ghcnd-countries.parquet') c
+                LEFT JOIN read_parquet('${countriesPath}') c
                     ON SUBSTRING(w.ID, 1, 2) = c.s
-                LEFT JOIN read_parquet('/Users/xevix/Downloads/data/noaa/ghcnd-states.parquet') states
+                LEFT JOIN read_parquet('${statesPath}') states
                     ON st.st = states.st
                 WHERE w.DATA_VALUE IS NOT NULL 
                     AND w.DATA_VALUE != -9999
@@ -323,8 +435,8 @@ app.get('/api/world-data/:year/:element', async (req, res) => {
                     NULL as parent,
                     AVG(CAST(w.DATA_VALUE AS DOUBLE)) as avg_value,
                     COUNT(*) as data_points
-                FROM read_parquet('/Users/xevix/Downloads/data/noaa/by_year/YEAR=${year}/ELEMENT=${element}/*.parquet') w
-                LEFT JOIN read_parquet('/Users/xevix/Downloads/data/noaa/ghcnd-countries.parquet') c
+                FROM read_parquet('${dataPath}') w
+                LEFT JOIN read_parquet('${countriesPath}') c
                     ON SUBSTRING(w.ID, 1, 2) = c.s
                 WHERE w.DATA_VALUE IS NOT NULL 
                     AND w.DATA_VALUE != -9999
@@ -349,10 +461,10 @@ app.get('/api/world-data/:year/:element', async (req, res) => {
                     NULL as parent,
                     AVG(CAST(w.DATA_VALUE AS DOUBLE)) as avg_value,
                     COUNT(*) as data_points
-                FROM read_parquet('/Users/xevix/Downloads/data/noaa/by_year/YEAR=${year}/ELEMENT=${element}/*.parquet') w
-                LEFT JOIN read_parquet('/Users/xevix/Downloads/data/noaa/ghcnd-stations.parquet') st
+                FROM read_parquet('${dataPath}') w
+                LEFT JOIN read_parquet('${stationsPath}') st
                     ON w.ID = st.id
-                LEFT JOIN read_parquet('/Users/xevix/Downloads/data/noaa/ghcnd-countries.parquet') c
+                LEFT JOIN read_parquet('${countriesPath}') c
                     ON SUBSTRING(w.ID, 1, 2) = c.s
                 WHERE w.DATA_VALUE IS NOT NULL 
                     AND w.DATA_VALUE != -9999
@@ -393,6 +505,12 @@ app.get('/api/country-stats/:year/:element', async (req, res) => {
     const state = req.query.state; // Optional state filter
 
     try {
+        // Ensure data is present
+        const dataPath = await ensureLocalData(year, element);
+        const stationsPath = await ensureLocalLookupFile('ghcnd-stations.parquet', 'parquet/ghcnd-stations.parquet');
+        const countriesPath = await ensureLocalLookupFile('ghcnd-countries.parquet', 'parquet/ghcnd-countries.parquet');
+        const statesPath = await ensureLocalLookupFile('ghcnd-states.parquet', 'parquet/ghcnd-states.parquet');
+
         // Build geographic filter if needed
         let geoFilter = '';
         if (country || state) {
@@ -420,12 +538,12 @@ app.get('/api/country-stats/:year/:element', async (req, res) => {
                     st.name as station_name,
                     c.name as country_name,
                     states.name as state_name
-                FROM read_parquet('/Users/xevix/Downloads/data/noaa/by_year/YEAR=${year}/ELEMENT=${element}/*.parquet') w
-                LEFT JOIN read_parquet('/Users/xevix/Downloads/data/noaa/ghcnd-stations.parquet') st
+                FROM read_parquet('${dataPath}') w
+                LEFT JOIN read_parquet('${stationsPath}') st
                     ON w.ID = st.id
-                LEFT JOIN read_parquet('/Users/xevix/Downloads/data/noaa/ghcnd-countries.parquet') c
+                LEFT JOIN read_parquet('${countriesPath}') c
                     ON SUBSTRING(w.ID, 1, 2) = c.s
-                LEFT JOIN read_parquet('/Users/xevix/Downloads/data/noaa/ghcnd-states.parquet') states
+                LEFT JOIN read_parquet('${statesPath}') states
                     ON st.st = states.st
                 WHERE w.DATA_VALUE IS NOT NULL 
                     AND w.DATA_VALUE != -9999
@@ -504,16 +622,22 @@ app.get('/api/weather/:year/:element', async (req, res) => {
     const state = req.query.state; // Optional state filter
 
     try {
+        // Ensure data is present
+        const dataPath = await ensureLocalData(year, element);
+        const stationsPath = await ensureLocalLookupFile('ghcnd-stations.parquet', 'parquet/ghcnd-stations.parquet');
+        const countriesPath = await ensureLocalLookupFile('ghcnd-countries.parquet', 'parquet/ghcnd-countries.parquet');
+        const statesPath = await ensureLocalLookupFile('ghcnd-states.parquet', 'parquet/ghcnd-states.parquet');
+
         // Build geographic filter if needed
         let geoFilter = '';
         if (country || state) {
             geoFilter = `
                 AND ID IN (
                     SELECT st.id 
-                    FROM read_parquet('/Users/xevix/Downloads/data/noaa/ghcnd-stations.parquet') st
-                    LEFT JOIN read_parquet('/Users/xevix/Downloads/data/noaa/ghcnd-countries.parquet') c
+                    FROM read_parquet('${stationsPath}') st
+                    LEFT JOIN read_parquet('${countriesPath}') c
                         ON SUBSTRING(st.id, 1, 2) = c.s
-                    LEFT JOIN read_parquet('/Users/xevix/Downloads/data/noaa/ghcnd-states.parquet') states
+                    LEFT JOIN read_parquet('${statesPath}') states
                         ON st.st = states.st
                     WHERE 1=1
                     ${country ? `AND c.name = '${country}'` : ''}
@@ -530,7 +654,7 @@ app.get('/api/weather/:year/:element', async (req, res) => {
                 EXTRACT(MONTH FROM STRPTIME(DATE, '%Y%m%d')) as month,
                 EXTRACT(DAY FROM STRPTIME(DATE, '%Y%m%d')) as day,
                 EXTRACT(YEAR FROM STRPTIME(DATE, '%Y%m%d')) as year
-            FROM read_parquet('/Users/xevix/Downloads/data/noaa/by_year/YEAR=${year}/ELEMENT=${element}/*.parquet')
+            FROM read_parquet('${dataPath}')
             WHERE DATA_VALUE IS NOT NULL 
                 AND DATA_VALUE != -9999
                 AND (Q_FLAG IS NULL OR Q_FLAG != 'X')
@@ -547,7 +671,7 @@ app.get('/api/weather/:year/:element', async (req, res) => {
                     EXTRACT(MONTH FROM STRPTIME(DATE, '%Y%m%d')) as month,
                     EXTRACT(DAY FROM STRPTIME(DATE, '%Y%m%d')) as day,
                     EXTRACT(YEAR FROM STRPTIME(DATE, '%Y%m%d')) as year
-                FROM read_parquet('/Users/xevix/Downloads/data/noaa/by_year/YEAR=${year}/ELEMENT=${element}/*.parquet')
+                FROM read_parquet('${dataPath}')
                 WHERE DATA_VALUE IS NOT NULL 
                     AND DATA_VALUE != -9999
                     AND (Q_FLAG IS NULL OR Q_FLAG != 'X')
@@ -574,7 +698,6 @@ app.get('/api/weather/:year/:element', async (req, res) => {
                 res.status(500).json({ error: 'Database query failed' });
             } else {
                 try {
-                    // console.log(`Query returned ${result.length} rows`);
                     if (result.length > 0) {
                         // console.log('Sample row:', result[0]);
                     }
@@ -595,7 +718,6 @@ app.get('/api/weather/:year/:element', async (req, res) => {
                         }
                     }).filter(row => row !== null);
 
-                    // console.log(`Processed ${processedData.length} rows successfully`);
                     res.json(processedData);
                 } catch (processingError) {
                     console.error('Error processing results:', processingError);

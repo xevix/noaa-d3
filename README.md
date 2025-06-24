@@ -13,7 +13,7 @@ A D3.js-based web application for visualizing NOAA weather data stored in Parque
 ## Prerequisites
 
 - Node.js (v14 or higher)
-- NOAA weather data in Parquet format stored at `/Users/xevix/Downloads/data/noaa/by_year/`
+- NOAA weather data in Parquet format stored at `data/by_year/`
 
 ## Installation
 
@@ -42,7 +42,7 @@ A D3.js-based web application for visualizing NOAA weather data stored in Parque
 
 The application expects NOAA weather data in the following directory structure:
 ```
-/Users/xevix/Downloads/data/noaa/by_year/
+data/by_year/
 ├── YEAR=2020/
 │   ├── ELEMENT=TMAX/
 │   ├── ELEMENT=TMIN/
