@@ -19,6 +19,8 @@ const LOCAL_DATA_ROOT = path.join(__dirname, 'data');
 const S3_BUCKET = 'noaa-ghcn-pds';
 const S3_PREFIX = 'parquet/by_year';
 
+const AVAILABLE_CACHE_FILE = path.join(LOCAL_DATA_ROOT, 'available_year_elements.json');
+
 async function ensureLocalData(year, element) {
     // Always use DuckDB COPY to download S3 parquet files to local, then query locally
     const localDir = path.join(LOCAL_DATA_ROOT, `by_year/YEAR=${year}/ELEMENT=${element}`);
@@ -230,57 +232,74 @@ app.get('/api/locations/:year/:element', async (req, res) => {
     }
 });
 
+async function loadOrCreateAvailableYearElementsCache() {
+    if (fs.existsSync(AVAILABLE_CACHE_FILE)) {
+        // Use the cache if it exists
+        try {
+            const raw = fs.readFileSync(AVAILABLE_CACHE_FILE, 'utf-8');
+            return JSON.parse(raw);
+        } catch (e) {
+            console.error('Failed to read available_year_elements.json, will re-query:', e);
+        }
+    }
+    // Query S3 via DuckDB for all available (year, element) pairs
+    const s3Glob = `s3://${S3_BUCKET}/${S3_PREFIX}/YEAR=*/ELEMENT=*/*.parquet`;
+    const sql = `SELECT DISTINCT
+        REGEXP_EXTRACT(file, 'YEAR=([0-9]{4})', 1) AS year,
+        REGEXP_EXTRACT(file, 'ELEMENT=([A-Z0-9]+)', 1) AS element
+    FROM glob('${s3Glob}')`;
+    return new Promise((resolve, reject) => {
+        connection.all(sql, (err, rows) => {
+            if (err) {
+                console.error('DuckDB S3 year/element query failed:', err);
+                reject(err);
+                return;
+            }
+            // Save to cache
+            try {
+                fs.writeFileSync(AVAILABLE_CACHE_FILE, JSON.stringify(rows, null, 2), 'utf-8');
+            } catch (e) {
+                console.error('Failed to write available_year_elements.json:', e);
+            }
+            resolve(rows);
+        });
+    });
+}
+
+app.get('/api/years', async (_, res) => {
+    try {
+        const available = await loadOrCreateAvailableYearElementsCache();
+        // Extract unique years, sort descending
+        const years = Array.from(new Set(available.map(r => parseInt(r.year, 10)))).filter(y => !isNaN(y)).sort((a, b) => b - a);
+        res.json(years);
+    } catch (error) {
+        console.error('Server error getting years:', error);
+        res.status(500).json({ error: 'Server error getting years' });
+    }
+});
+
 app.get('/api/elements/:year', async (req, res) => {
     const { year } = req.params;
-
     try {
-        const yearDir = path.join(LOCAL_DATA_ROOT, `by_year/YEAR=${year}`);
-        // Download at least one element to ensure year dir exists (or check S3 for available elements)
-        if (!fs.existsSync(yearDir)) {
-            // Download the list of elements for this year from S3
-            const s3Prefix = `${S3_PREFIX}/YEAR=${year}/`;
-            const listParams = {
-                Bucket: S3_BUCKET,
-                Prefix: s3Prefix,
-                Delimiter: '/'
-            };
-            const listedObjects = await s3.send(new ListObjectsV2Command(listParams));
-            const elementDirs = listedObjects.CommonPrefixes
-                ? listedObjects.CommonPrefixes.map(cp => cp.Prefix.split('/').filter(Boolean).pop())
-                : [];
-            if (elementDirs.length === 0) {
-                return res.status(404).json({ error: 'Year not found' });
-            }
-            fs.mkdirSync(yearDir, { recursive: true });
-            // Create empty element dirs locally for UI listing
-            for (const dir of elementDirs) {
-                if (dir.startsWith('ELEMENT=')) {
-                    fs.mkdirSync(path.join(yearDir, dir), { recursive: true });
-                }
-            }
-        }
-        // Read element directories and extract element names
-        const elementNames = fs.readdirSync(yearDir, { withFileTypes: true })
-            .filter(dirent => dirent.isDirectory())
-            .map(dirent => dirent.name)
-            .filter(name => name.startsWith('ELEMENT='))
-            .map(name => name.split('=')[1])
-            .sort();
-
+        const available = await loadOrCreateAvailableYearElementsCache();
+        // Extract unique elements for this year
+        const elements = Array.from(new Set(
+            available.filter(r => String(r.year) === String(year)).map(r => r.element)
+        )).sort();
+        // Optionally, add descriptions as before (reuse existing logic if needed)
         // Get element descriptions from CSV
         const csvPath = await ensureLocalLookupFile('complete_element_descriptions.csv', 'parquet/complete_element_descriptions.csv');
         const query = `
             SELECT Element, Description, Unit
             FROM read_csv('${csvPath}', header=true)
-            WHERE Element IN (${elementNames.map(name => `'${name}'`).join(', ')})
+            WHERE Element IN (${elements.map(name => `'${name}'`).join(', ')})
         `;
-
         connection.all(query, (err, descriptions) => {
             if (err) {
                 console.error('Error reading element descriptions:', err);
                 // Fallback to just element names
-                const elements = elementNames.map(name => ({ code: name, description: name }));
-                res.json(elements);
+                const out = elements.map(name => ({ code: name, description: name }));
+                res.json(out);
             } else {
                 // Create lookup map for descriptions
                 const descMap = {};
@@ -290,55 +309,18 @@ app.get('/api/elements/:year', async (req, res) => {
                         unit: row.Unit
                     };
                 });
-
                 // Augment elements with descriptions
-                const elements = elementNames.map(name => ({
+                const out = elements.map(name => ({
                     code: name,
                     description: descMap[name] ? `${name} - ${descMap[name].description}` : name,
                     unit: descMap[name] ? descMap[name].unit : null
                 }));
-
-                console.log(`Found ${elements.length} elements for year ${year} with descriptions`);
-                res.json(elements);
+                res.json(out);
             }
         });
-
     } catch (error) {
         console.error('Server error getting elements:', error);
         res.status(500).json({ error: 'Server error getting elements' });
-    }
-});
-
-app.get('/api/years', async (_, res) => {
-    try {
-        const dataDir = path.join(LOCAL_DATA_ROOT, 'by_year');
-        // If not present locally, list from S3
-        let dirNames = [];
-        if (!fs.existsSync(dataDir)) {
-            // List years from S3
-            const listParams = {
-                Bucket: S3_BUCKET,
-                Prefix: `${S3_PREFIX}/`,
-                Delimiter: '/'
-            };
-            const listedObjects = await s3.send(new ListObjectsV2Command(listParams));
-            dirNames = listedObjects.CommonPrefixes
-                ? listedObjects.CommonPrefixes.map(cp => cp.Prefix.split('/').filter(Boolean).pop())
-                : [];
-            dirNames = dirNames.filter(name => name.startsWith('YEAR=')).map(name => parseInt(name.split('=')[1])).filter(year => !isNaN(year)).sort((a, b) => b - a);
-        } else {
-            dirNames = fs.readdirSync(dataDir, { withFileTypes: true })
-                .filter(dirent => dirent.isDirectory())
-                .map(dirent => dirent.name)
-                .filter(name => name.startsWith('YEAR='))
-                .map(name => parseInt(name.split('=')[1]))
-                .filter(year => !isNaN(year))
-                .sort((a, b) => b - a); // Sort descending (newest first)
-        }
-        res.json(dirNames);
-    } catch (error) {
-        console.error('Server error getting years:', error);
-        res.status(500).json({ error: 'Server error getting years' });
     }
 });
 
