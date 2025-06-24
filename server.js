@@ -46,7 +46,7 @@ async function ensureLocalData(year, element) {
     const localParquetFile = path.join(localDir, 'data.parquet');
     // If the local file exists and is non-empty, use it
     if (fs.existsSync(localParquetFile) && fs.statSync(localParquetFile).size > 0) {
-        return localParquetFile;
+        return { path: localParquetFile, downloaded: false };
     }
     // Remove any existing local parquet files first (to avoid partial/corrupt data)
     if (fs.existsSync(localDir)) {
@@ -68,7 +68,7 @@ async function ensureLocalData(year, element) {
         if (!fs.existsSync(localParquetFile) || fs.statSync(localParquetFile).size === 0) {
             throw new Error('DuckDB COPY did not produce a local parquet file');
         }
-        return localParquetFile;
+        return { path: localParquetFile, downloaded: true };
     } catch (copyErr) {
         console.error(`[DuckDB COPY failed] for ${year}/${element}:`, copyErr.message || copyErr);
         throw new Error(`No parquet files found for year=${year}, element=${element}. Data may be missing or download failed.`);
@@ -105,7 +105,8 @@ app.get('/api/stations/:year/:element', async (req, res) => {
 
     try {
         // Ensure data is present
-        const dataPath = await ensureLocalData(year, element);
+        const dataResult = await ensureLocalData(year, element);
+        const dataPath = dataResult.path;
         const stationsPath = await ensureLocalLookupFile('ghcnd-stations.parquet', 'parquet/ghcnd-stations.parquet');
         const countriesPath = await ensureLocalLookupFile('ghcnd-countries.parquet', 'parquet/ghcnd-countries.parquet');
         const statesPath = await ensureLocalLookupFile('ghcnd-states.parquet', 'parquet/ghcnd-states.parquet');
@@ -174,7 +175,8 @@ app.get('/api/locations/:year/:element', async (req, res) => {
 
     try {
         // Ensure data is present
-        const dataPath = await ensureLocalData(year, element);
+        const dataResult = await ensureLocalData(year, element);
+        const dataPath = dataResult.path;
         const stationsPath = await ensureLocalLookupFile('ghcnd-stations.parquet', 'parquet/ghcnd-stations.parquet');
         const countriesPath = await ensureLocalLookupFile('ghcnd-countries.parquet', 'parquet/ghcnd-countries.parquet');
         const statesPath = await ensureLocalLookupFile('ghcnd-states.parquet', 'parquet/ghcnd-states.parquet');
@@ -353,7 +355,8 @@ app.get('/api/world-data/:year/:element', async (req, res) => {
 
     try {
         // Ensure data is present
-        const dataPath = await ensureLocalData(year, element);
+        const dataResult = await ensureLocalData(year, element);
+        const dataPath = dataResult.path;
         const stationsPath = await ensureLocalLookupFile('ghcnd-stations.parquet', 'parquet/ghcnd-stations.parquet');
         const countriesPath = await ensureLocalLookupFile('ghcnd-countries.parquet', 'parquet/ghcnd-countries.parquet');
         const statesPath = await ensureLocalLookupFile('ghcnd-states.parquet', 'parquet/ghcnd-states.parquet');
@@ -509,7 +512,8 @@ app.get('/api/country-stats/:year/:element', async (req, res) => {
 
     try {
         // Ensure data is present
-        const dataPath = await ensureLocalData(year, element);
+        const dataResult = await ensureLocalData(year, element);
+        const dataPath = dataResult.path;
         const stationsPath = await ensureLocalLookupFile('ghcnd-stations.parquet', 'parquet/ghcnd-stations.parquet');
         const countriesPath = await ensureLocalLookupFile('ghcnd-countries.parquet', 'parquet/ghcnd-countries.parquet');
         const statesPath = await ensureLocalLookupFile('ghcnd-states.parquet', 'parquet/ghcnd-states.parquet');
@@ -626,7 +630,11 @@ app.get('/api/weather/:year/:element', async (req, res) => {
 
     try {
         // Ensure data is present
-        const dataPath = await ensureLocalData(year, element);
+        const dataResult = await ensureLocalData(year, element);
+        const dataPath = dataResult.path;
+        if (dataResult.downloaded) {
+            res.set('X-Noaa-Download', 'true');
+        }
         const stationsPath = await ensureLocalLookupFile('ghcnd-stations.parquet', 'parquet/ghcnd-stations.parquet');
         const countriesPath = await ensureLocalLookupFile('ghcnd-countries.parquet', 'parquet/ghcnd-countries.parquet');
         const statesPath = await ensureLocalLookupFile('ghcnd-states.parquet', 'parquet/ghcnd-states.parquet');

@@ -893,14 +893,24 @@ class NOAAWeatherVisualizer {
         const element = document.getElementById('element-select').value;
         const chartType = document.getElementById('chart-type').value;
         const station = document.getElementById('station-select').value;
-        this.showLoadingImmediate('loading'); // Show immediately for downloading
-        this.setLoadingMessage(`Downloading data for YEAR=${year}, ELEMENT=${element}...`);
+        // Do not show loading UI yet; let queryWeatherData decide
         const refreshBtn = document.getElementById('load-data');
         const originalBtnText = refreshBtn.innerHTML;
         refreshBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Loading...';
         refreshBtn.disabled = true;
+        let usedImmediate = false;
         try {
-            const data = await this.queryWeatherData(year, element, station);
+            // Pass a callback to queryWeatherData to control loading UI
+            const data = await this.queryWeatherData(year, element, station, (isDownloading) => {
+                if (isDownloading) {
+                    this.showLoadingImmediate('loading');
+                    this.setLoadingMessage(`Downloading data for YEAR=${year}, ELEMENT=${element}...`);
+                    usedImmediate = true;
+                } else {
+                    this.showLoadingDelayed('loading');
+                    this.setLoadingMessage('Loading weather data...');
+                }
+            });
             this.currentData = data;
             this.originalData = [...data];
             this.zoomExtent = null;
@@ -920,13 +930,12 @@ class NOAAWeatherVisualizer {
         }
     }
 
-    async queryWeatherData(year, element, station = null) {
+    async queryWeatherData(year, element, station = null, loadingUICallback) {
         try {
             const params = new URLSearchParams({ limit: 5000 });
             if (station) {
                 params.append('station', station);
             }
-
             // Add geographic filters
             const country = document.getElementById('country-select').value;
             const state = document.getElementById('state-select').value;
@@ -936,8 +945,12 @@ class NOAAWeatherVisualizer {
             if (state) {
                 params.append('state', state);
             }
-
             const response = await fetch(`/api/weather/${year}/${element}?${params}`);
+            // Decide which loading UI to show based on header
+            if (loadingUICallback) {
+                const isDownloading = response.headers.get('x-noaa-download') === 'true';
+                loadingUICallback(isDownloading);
+            }
             if (!response.ok) {
                 throw new Error('Failed to fetch weather data');
             }
