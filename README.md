@@ -11,11 +11,9 @@ A D3.js-based web application for visualizing NOAA weather data stored in Parque
 - **Responsive Design**: Clean, modern interface that works on different screen sizes
 
 ## Prerequisites
-- uv (Python package manager) - for running Python scripts to fetch data
-- AWS CLI - for downloading data from S3
-
-- Node.js (v14 or higher)
-- NOAA weather data in Parquet format stored at `data/by_year/`
+- [uv (Python package manager)](https://docs.astral.sh/uv/getting-started/installation/) - for running Python scripts to fetch data
+- [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html) - for downloading data from S3
+- [Node.js](https://nodejs.org/en/download) (v14 or higher)
 
 ## Installation
 
@@ -33,20 +31,19 @@ A D3.js-based web application for visualizing NOAA weather data stored in Parque
 
 1. Start the server:
    ```bash
-   npm start
+   npm run dev
    ```
 
 2. Open your browser and navigate to `http://localhost:3000`
 
 3. Use the controls to:
-   - Select a year (2020-2023)
+   - Select a year
    - Choose a weather element (Temperature or Precipitation) 
    - Pick a chart type (Line, Bar, or Heat Map)
-   - Click "Load Data" to generate the visualization
 
 ## Data Structure
 
-The application expects NOAA weather data in the following directory structure:
+The application downloads NOAA weather data as needed and stores it in `data` in the following directory structure:
 ```
 data/by_year/
 ├── YEAR=2020/
