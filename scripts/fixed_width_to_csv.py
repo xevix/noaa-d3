@@ -115,16 +115,12 @@ def convert_fixed_width_to_csv(input_filepath, output_filepath, data_set_name):
         print("Error: Input file is empty.")
         return
     
-    column_starts = [start_pos - 1 for _, start_pos in column_names_and_start_positions[data_set_name]]
-
-    # Write the header row, but lowercase the column names and replace spaces with underscores
-    header_row = [name.lower().replace(' ', '_') for name, _ in column_names_and_start_positions[data_set_name]]
-    with open(output_filepath, 'w', encoding='utf-8') as f:
-        f.write('|'.join(header_row) + '\n')
-    
+    column_starts = [start_pos - 1 for _, start_pos in column_names_and_start_positions[data_set_name]]    
     # Convert and write to CSV
     try:
         with open(output_filepath, 'w', encoding='utf-8') as f:
+            header_row = [name.lower().replace(' ', '_') for name, _ in column_names_and_start_positions[data_set_name]]
+            f.write('|'.join(header_row) + '\n')
             for line_num, line in enumerate(lines):
                 # Extract columns from this line
                 columns = extract_columns(line, column_starts)
@@ -161,7 +157,7 @@ def convert_to_parquet(input_filepath, output_filepath):
     Convert a CSV file to a Parquet file using DuckDB.
     """
     print(f"Converting {input_filepath} to {output_filepath}")
-    duckdb.sql(f"COPY (FROM '{input_filepath}') TO '{output_filepath}' (PARQUET_VERSION V2, COMPRESSION ZSTD)")
+    duckdb.sql(f"COPY (FROM read_csv('{input_filepath}', delim='|', header=true)) TO '{output_filepath}' (PARQUET_VERSION V2, COMPRESSION ZSTD)")
     print(f"Converted {input_filepath} to {output_filepath}")
     
 def convert_data_set(data_set_name):

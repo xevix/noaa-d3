@@ -138,9 +138,9 @@ app.get('/api/stations/:year/:element', async (req, res) => {
             LEFT JOIN read_parquet('${stationsPath}') st
                 ON s.station_id = st.id
             LEFT JOIN read_parquet('${countriesPath}') c
-                ON SUBSTRING(s.station_id, 1, 2) = c.s
+                ON SUBSTRING(s.station_id, 1, 2) = c.code
             LEFT JOIN read_parquet('${statesPath}') states
-                ON st.st = states.st
+                ON st.state = states.code
             WHERE st.name IS NOT NULL
                 ${geoFilter}
             ORDER BY station_name
@@ -197,9 +197,9 @@ app.get('/api/locations/:year/:element', async (req, res) => {
                 LEFT JOIN read_parquet('${stationsPath}') st
                     ON s.station_id = st.id
                 LEFT JOIN read_parquet('${countriesPath}') c
-                    ON SUBSTRING(s.station_id, 1, 2) = c.s
+                    ON SUBSTRING(s.station_id, 1, 2) = c.code
                 LEFT JOIN read_parquet('${statesPath}') states
-                    ON st.st = states.st
+                    ON st.state = states.code
                 WHERE c.name IS NOT NULL
             ),
             all_countries AS (
@@ -393,9 +393,9 @@ app.get('/api/world-data/:year/:element', async (req, res) => {
                 LEFT JOIN read_parquet('${stationsPath}') st
                     ON w.ID = st.id
                 LEFT JOIN read_parquet('${countriesPath}') c
-                    ON SUBSTRING(w.ID, 1, 2) = c.s
+                    ON SUBSTRING(w.ID, 1, 2) = c.code
                 LEFT JOIN read_parquet('${statesPath}') states
-                    ON st.st = states.st
+                    ON st.state = states.code
                 WHERE ${whereClauses.join(' AND ')}
                 GROUP BY c.name, states.name
                 HAVING COUNT(*) >= 10
@@ -420,9 +420,9 @@ app.get('/api/world-data/:year/:element', async (req, res) => {
                 LEFT JOIN read_parquet('${stationsPath}') st
                     ON w.ID = st.id
                 LEFT JOIN read_parquet('${countriesPath}') c
-                    ON SUBSTRING(w.ID, 1, 2) = c.s
+                    ON SUBSTRING(w.ID, 1, 2) = c.code
                 LEFT JOIN read_parquet('${statesPath}') states
-                    ON st.st = states.st
+                    ON st.state = states.code
                 WHERE w.DATA_VALUE IS NOT NULL 
                     AND w.DATA_VALUE != -9999
                     AND (w.Q_FLAG IS NULL OR w.Q_FLAG != 'X')
@@ -443,7 +443,7 @@ app.get('/api/world-data/:year/:element', async (req, res) => {
                     COUNT(*) as data_points
                 FROM read_parquet('${dataPath}') w
                 LEFT JOIN read_parquet('${countriesPath}') c
-                    ON SUBSTRING(w.ID, 1, 2) = c.s
+                    ON SUBSTRING(w.ID, 1, 2) = c.code
                 WHERE w.DATA_VALUE IS NOT NULL 
                     AND w.DATA_VALUE != -9999
                     AND (w.Q_FLAG IS NULL OR w.Q_FLAG != 'X')
@@ -471,7 +471,7 @@ app.get('/api/world-data/:year/:element', async (req, res) => {
                 LEFT JOIN read_parquet('${stationsPath}') st
                     ON w.ID = st.id
                 LEFT JOIN read_parquet('${countriesPath}') c
-                    ON SUBSTRING(w.ID, 1, 2) = c.s
+                    ON SUBSTRING(w.ID, 1, 2) = c.code
                 WHERE w.DATA_VALUE IS NOT NULL 
                     AND w.DATA_VALUE != -9999
                     AND (w.Q_FLAG IS NULL OR w.Q_FLAG != 'X')
@@ -549,9 +549,9 @@ app.get('/api/country-stats/:year/:element', async (req, res) => {
                 LEFT JOIN read_parquet('${stationsPath}') st
                     ON w.ID = st.id
                 LEFT JOIN read_parquet('${countriesPath}') c
-                    ON SUBSTRING(w.ID, 1, 2) = c.s
+                    ON SUBSTRING(w.ID, 1, 2) = c.code
                 LEFT JOIN read_parquet('${statesPath}') states
-                    ON st.st = states.st
+                    ON st.state = states.code
                 WHERE w.DATA_VALUE IS NOT NULL 
                     AND w.DATA_VALUE != -9999
                     AND (w.Q_FLAG IS NULL OR w.Q_FLAG != 'X')
@@ -647,9 +647,9 @@ app.get('/api/weather/:year/:element', async (req, res) => {
                     SELECT st.id 
                     FROM read_parquet('${stationsPath}') st
                     LEFT JOIN read_parquet('${countriesPath}') c
-                        ON SUBSTRING(st.id, 1, 2) = c.s
+                        ON SUBSTRING(st.id, 1, 2) = c.code
                     LEFT JOIN read_parquet('${statesPath}') states
-                        ON st.st = states.st
+                        ON st.state = states.code
                     WHERE 1=1
                     ${country ? `AND c.name = '${country}'` : ''}
                     ${state ? `AND states.name = '${state}'` : ''}
