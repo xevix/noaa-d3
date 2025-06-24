@@ -10,8 +10,8 @@ Data is sourced from [NOAA via AWS S3](https://registry.opendata.aws/noaa-ghcn/)
 
 - **Interactive Data Visualization**: View weather data through line charts, bar charts, and heat maps
 - **Multiple Weather Elements**: Supports Temperature (TMAX, TMIN, TAVG) and Precipitation (PRCP) data
-- **Year Selection**: Choose from available years (2020-2023)
-- **Real-time Querying**: Uses DuckDB to query Parquet files directly without preprocessing
+- **Year Selection**: Choose from available years
+- **Parquet Querying**: Uses DuckDB to query cached Parquet files, avoiding need to download entire data set ahead of time like with Evidence
 - **Responsive Design**: Clean, modern interface that works on different screen sizes
 
 ## Prerequisites
