@@ -163,16 +163,22 @@ class NOAAWeatherVisualizer {
     async loadAvailableYears() {
         try {
             this.showLoadingDelayed('loading');
+            this.setLoadingMessage('Checking available years...');
             const response = await fetch('/api/years');
             if (!response.ok) {
                 throw new Error('Failed to fetch available years');
             }
-
+            // Optionally, check for a custom header to see if cache was used
+            if (response.headers.get('x-noaa-cache') === 'hit') {
+                this.setLoadingMessage('Using cached year/element list...');
+            } else {
+                this.setLoadingMessage('Listing available years from S3 (first run may take a while)...');
+            }
             this.availableYears = await response.json();
             this.populateYearSelector();
-
         } catch (error) {
             console.error('Error loading available years:', error);
+            this.setLoadingMessage('Failed to load years. Using fallback list.');
             // Fallback to hardcoded years if API fails
             this.availableYears = [2024, 2023, 2022, 2021, 2020];
             this.populateYearSelector();
@@ -202,18 +208,22 @@ class NOAAWeatherVisualizer {
     async loadAvailableElements() {
         const year = document.getElementById('year-select').value;
         if (!year) return;
-
         try {
+            this.setLoadingMessage(`Checking available data types for ${year}...`);
             const response = await fetch(`/api/elements/${year}`);
             if (!response.ok) {
                 throw new Error('Failed to fetch available elements');
             }
-
+            if (response.headers.get('x-noaa-cache') === 'hit') {
+                this.setLoadingMessage('Using cached year/element list...');
+            } else {
+                this.setLoadingMessage(`Listing available data types for ${year} from S3...`);
+            }
             this.availableElements = await response.json();
             this.populateElementSelector();
-
         } catch (error) {
             console.error('Error loading available elements:', error);
+            this.setLoadingMessage('Failed to load data types. Using fallback list.');
             // Fallback to hardcoded elements if API fails
             this.availableElements = ['TMAX', 'TMIN', 'PRCP', 'TAVG'];
             this.populateElementSelector();
@@ -878,36 +888,28 @@ class NOAAWeatherVisualizer {
         const element = document.getElementById('element-select').value;
         const chartType = document.getElementById('chart-type').value;
         const station = document.getElementById('station-select').value;
-
-        // Clear existing chart immediately to prevent overlaps
         this.g.selectAll('*').remove();
-
-        // Show loading state with delay
         this.showLoadingDelayed('loading');
+        this.setLoadingMessage(`Downloading data for YEAR=${year}, ELEMENT=${element}...`);
         const refreshBtn = document.getElementById('load-data');
         const originalBtnText = refreshBtn.innerHTML;
         refreshBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Loading...';
         refreshBtn.disabled = true;
-
         try {
             const data = await this.queryWeatherData(year, element, station);
             this.currentData = data;
-            this.originalData = [...data]; // Store original data for zoom reset
-            this.zoomExtent = null; // Reset line chart zoom
+            this.originalData = [...data];
+            this.zoomExtent = null;
             this.visualizeData(data, chartType, element);
-            
-            // Load country stats for table if visible
             if (this.showTable) {
                 await this.loadCountryStats();
             }
-            
-            // Also load and visualize world map data
             await this.loadAndVisualizeWorldMap(year, element);
         } catch (error) {
             console.error('Error loading data:', error);
+            this.setLoadingMessage('Error loading data. Please try again.');
             alert('Error loading data. Please try again.');
         } finally {
-            // Reset loading state
             this.hideLoadingImmediate('loading');
             refreshBtn.innerHTML = originalBtnText;
             refreshBtn.disabled = false;
@@ -2080,6 +2082,13 @@ LIMIT 1000;
         } catch (err) {
             console.error('Failed to copy stations query: ', err);
             alert('Failed to copy stations query to clipboard');
+        }
+    }
+
+    setLoadingMessage(msg) {
+        const loadingText = document.querySelector('#loading .loading-text');
+        if (loadingText) {
+            loadingText.textContent = msg;
         }
     }
 }

@@ -268,9 +268,12 @@ async function loadOrCreateAvailableYearElementsCache() {
 
 app.get('/api/years', async (_, res) => {
     try {
+        let usedCache = false;
+        if (fs.existsSync(AVAILABLE_CACHE_FILE)) usedCache = true;
         const available = await loadOrCreateAvailableYearElementsCache();
         // Extract unique years, sort descending
         const years = Array.from(new Set(available.map(r => parseInt(r.year, 10)))).filter(y => !isNaN(y)).sort((a, b) => b - a);
+        res.set('X-Noaa-Cache', usedCache ? 'hit' : 'miss');
         res.json(years);
     } catch (error) {
         console.error('Server error getting years:', error);
@@ -281,6 +284,8 @@ app.get('/api/years', async (_, res) => {
 app.get('/api/elements/:year', async (req, res) => {
     const { year } = req.params;
     try {
+        let usedCache = false;
+        if (fs.existsSync(AVAILABLE_CACHE_FILE)) usedCache = true;
         const available = await loadOrCreateAvailableYearElementsCache();
         // Extract unique elements for this year
         const elements = Array.from(new Set(
@@ -295,6 +300,7 @@ app.get('/api/elements/:year', async (req, res) => {
             WHERE Element IN (${elements.map(name => `'${name}'`).join(', ')})
         `;
         connection.all(query, (err, descriptions) => {
+            res.set('X-Noaa-Cache', usedCache ? 'hit' : 'miss');
             if (err) {
                 console.error('Error reading element descriptions:', err);
                 // Fallback to just element names
