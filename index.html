@@ -85,6 +85,7 @@
             grid-template-columns: 450px 1.2fr 1fr;
             gap: 2rem;
             margin-bottom: 2rem;
+            align-items: stretch;
         }
         
         .controls-card {
@@ -252,12 +253,11 @@
             cursor: pointer;
         }
         
-        .visualization-card {
-            background: var(--surface-color);
-            border-radius: var(--radius-xl);
-            box-shadow: var(--shadow-xl);
-            border: 1px solid var(--border-color);
-            overflow: hidden;
+        .visualization-card,
+        .world-map-card {
+            height: 100%;
+            display: flex;
+            flex-direction: column;
         }
         
         .viz-header {
@@ -277,11 +277,20 @@
             font-size: 0.875rem;
         }
         
-        #chart-container {
-            height: 600px;
-            position: relative;
-            background: var(--surface-color);
-            border-radius: 0;
+        #chart-container,
+        #map-container {
+            flex: 1 1 0;
+            min-height: 0;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        #chart-container svg,
+        #map-container svg {
+            width: 100%;
+            height: 100%;
+            display: block;
         }
         
         .world-map-card {
@@ -310,55 +319,6 @@
         .map-header p {
             opacity: 0.9;
             font-size: 0.875rem;
-        }
-        
-        #map-container {
-            height: 600px;
-            position: relative;
-            background: var(--surface-color);
-            border-radius: 0;
-        }
-        
-        .data-table-section {
-            background: var(--surface-color);
-            border-radius: var(--radius-xl);
-            box-shadow: var(--shadow-xl);
-            border: 1px solid var(--border-color);
-            margin-top: 2rem;
-            overflow: hidden;
-        }
-        
-        .table-header {
-            padding: 2rem 2rem 1rem;
-            background: linear-gradient(135deg, var(--warning-color) 0%, #d97706 100%);
-            color: white;
-        }
-        
-        .table-header h3 {
-            font-size: 1.5rem;
-            font-weight: 600;
-            margin-bottom: 0.5rem;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-        
-        .table-header p {
-            opacity: 0.9;
-            font-size: 0.875rem;
-        }
-        
-        #table-info {
-            padding: 1rem 2rem;
-            background: var(--primary-light);
-            border-bottom: 1px solid var(--border-color);
-            font-size: 0.875rem;
-            color: var(--text-secondary);
-        }
-        
-        .table-container {
-            max-height: 400px;
-            overflow-y: auto;
         }
         
         #data-table {

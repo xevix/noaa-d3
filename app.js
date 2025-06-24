@@ -15,6 +15,10 @@ class NOAAWeatherVisualizer {
         // Loading management
         this.loadingTimers = new Map(); // Track loading timers for each element
 
+        // Resize handling
+        this.resizeTimer = null;
+        this.currentWorldData = null; // Store latest world data for redraws
+
         this.initializeEventListeners();
         this.setupChart();
         this.setupWorldMap();
@@ -85,6 +89,35 @@ class NOAAWeatherVisualizer {
         document.getElementById('station-select').addEventListener('change', () => {
             debouncedLoad();
         });
+
+        this.setupResizeListener();
+    }
+
+    setupResizeListener() {
+        const debouncedRedraw = () => {
+            clearTimeout(this.resizeTimer);
+            this.resizeTimer = setTimeout(() => {
+                console.log('Window resized, redrawing visualizations...');
+                this.redrawVisualizations();
+            }, 150);
+        };
+        window.addEventListener('resize', debouncedRedraw);
+    }
+
+    redrawVisualizations() {
+        // Redraw time series chart
+        if (this.currentData) {
+            const chartType = document.getElementById('chart-type').value;
+            const element = document.getElementById('element-select').value;
+            this.visualizeData(this.currentData, chartType, element);
+        }
+        // Redraw world map
+        if (this.currentWorldData) {
+            const element = document.getElementById('element-select').value;
+            const selectedCountry = document.getElementById('country-select').value;
+            const selectedState = document.getElementById('state-select').value;
+            this.createWorldMap(this.currentWorldData, element, selectedCountry, selectedState);
+        }
     }
 
     async initialize() {
@@ -122,6 +155,8 @@ class NOAAWeatherVisualizer {
             this.showErrorMessage('Failed to initialize application. Please refresh the page.');
         } finally {
             this.isInitialized = true;
+            // A final redraw after a short delay ensures everything is sized correctly on initial load
+            setTimeout(() => this.redrawVisualizations(), 200);
         }
     }
 
@@ -788,16 +823,11 @@ class NOAAWeatherVisualizer {
 
     setupChart() {
         const container = d3.select('#chart-container');
-        const containerRect = container.node().getBoundingClientRect();
 
         this.margin = { top: 20, right: 80, bottom: 70, left: 80 };
-        this.width = containerRect.width - this.margin.left - this.margin.right;
-        this.height = containerRect.height - this.margin.top - this.margin.bottom;
 
-        this.svg = container.append('svg')
-            .attr('width', this.width + this.margin.left + this.margin.right)
-            .attr('height', this.height + this.margin.top + this.margin.bottom);
-
+        // Create SVG elements without setting dimensions initially
+        this.svg = container.append('svg');
         this.g = this.svg.append('g')
             .attr('transform', `translate(${this.margin.left},${this.margin.top})`);
 
@@ -811,15 +841,9 @@ class NOAAWeatherVisualizer {
 
     setupWorldMap() {
         const container = d3.select('#map-container');
-        const containerRect = container.node().getBoundingClientRect();
-
-        this.mapWidth = containerRect.width;
-        this.mapHeight = containerRect.height;
-
-        this.mapSvg = container.append('svg')
-            .attr('width', this.mapWidth)
-            .attr('height', this.mapHeight);
-
+        
+        // Create SVG elements without setting dimensions initially
+        this.mapSvg = container.append('svg');
         this.mapG = this.mapSvg.append('g');
 
         // Initialize world map data
@@ -949,6 +973,7 @@ class NOAAWeatherVisualizer {
             }
             
             const worldData = await response.json();
+            this.currentWorldData = worldData; // Store for redraws
             this.createWorldMap(worldData, element, country, state);
             
             // Load country stats for table if visible (since table represents world map data)
@@ -996,14 +1021,28 @@ class NOAAWeatherVisualizer {
     }
 
     createWorldMap(worldData, element, selectedCountry, selectedState) {
-        // Clear existing map
-        this.mapG.selectAll('*').remove();
+        // Always clear the map container and append a fresh SVG and group
+        const container = d3.select('#map-container');
+        container.selectAll('svg').remove();
+        const containerRect = container.node().getBoundingClientRect();
+        this.mapWidth = containerRect.width;
+        this.mapHeight = containerRect.height;
 
-        // Create projection and path generator for world/country view
-        const projection = d3.geoNaturalEarth1()
-            .scale(140)
-            .translate([this.mapWidth / 2, this.mapHeight / 2]);
+        this.mapSvg = container.append('svg')
+            .attr('width', '100%')
+            .attr('height', '100%');
+        this.mapG = this.mapSvg.append('g');
 
+        // Get countries feature
+        const countries = topojson.feature(this.worldData, this.worldData.objects.countries);
+
+        // Create projection and path generator
+        const projection = d3.geoNaturalEarth1();
+        const margin = {top: 40, right: 20, bottom: 60, left: 20};
+        projection.fitExtent(
+            [[margin.left, margin.top], [this.mapWidth - margin.right, this.mapHeight - margin.bottom]],
+            countries
+        );
         const path = d3.geoPath().projection(projection);
 
         // Create data lookup for countries and states
@@ -1027,9 +1066,6 @@ class NOAAWeatherVisualizer {
             .interpolator(element === 'PRCP' ? d3.interpolateBlues : d3.interpolateRdYlBu)
             .domain(dataExtent);
 
-        // Draw countries
-        const countries = topojson.feature(this.worldData, this.worldData.objects.countries);
-        
         this.mapG.selectAll('.country')
             .data(countries.features)
             .enter().append('path')
@@ -1321,6 +1357,17 @@ class NOAAWeatherVisualizer {
     }
 
     visualizeData(data, chartType, element) {
+        // JIT (Just-In-Time) sizing: get dimensions right before drawing
+        const container = d3.select('#chart-container');
+        const containerRect = container.node().getBoundingClientRect();
+        
+        this.width = containerRect.width - this.margin.left - this.margin.right;
+        this.height = containerRect.height - this.margin.top - this.margin.bottom;
+        
+        this.svg
+            .attr('width', '100%')
+            .attr('height', '100%');
+
         // Immediately clear all existing elements to prevent overlap
         this.g.selectAll('*').remove();
 
