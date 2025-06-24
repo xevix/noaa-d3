@@ -38,7 +38,7 @@ Data is sourced from [NOAA via AWS S3](https://registry.opendata.aws/noaa-ghcn/)
    npm run dev
    ```
 
-2. Open your browser and navigate to `http://localhost:3000`
+2. Open your browser and navigate to `http://localhost:3001`
 
 3. Use the controls to:
    - Select a year
