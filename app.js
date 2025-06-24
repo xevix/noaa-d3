@@ -11,6 +11,9 @@ class NOAAWeatherVisualizer {
         this.showTable = false;
         this.currentCountryStats = null;
         this.tableSortState = { column: null, direction: null }; // null, 'asc', 'desc'
+        
+        // Loading management
+        this.loadingTimers = new Map(); // Track loading timers for each element
 
         this.initializeEventListeners();
         this.setupChart();
@@ -124,7 +127,7 @@ class NOAAWeatherVisualizer {
 
     async loadAvailableYears() {
         try {
-            document.getElementById('loading').style.display = 'block';
+            this.showLoadingDelayed('loading');
             const response = await fetch('/api/years');
             if (!response.ok) {
                 throw new Error('Failed to fetch available years');
@@ -139,7 +142,7 @@ class NOAAWeatherVisualizer {
             this.availableYears = [2024, 2023, 2022, 2021, 2020];
             this.populateYearSelector();
         } finally {
-            document.getElementById('loading').style.display = 'none';
+            this.hideLoadingImmediate('loading');
         }
     }
 
@@ -362,6 +365,39 @@ class NOAAWeatherVisualizer {
         this.urlState = null;
         this.urlStation = null;
         console.log('URL parameters cleared after initialization');
+    }
+
+    // Utility methods for delayed loading
+    showLoadingDelayed(elementId, delay = 5000) {
+        // Clear any existing timer for this element
+        if (this.loadingTimers.has(elementId)) {
+            clearTimeout(this.loadingTimers.get(elementId));
+        }
+        
+        // Set a timer to show loading after the delay
+        const timer = setTimeout(() => {
+            const element = document.getElementById(elementId);
+            if (element) {
+                element.style.display = 'block';
+            }
+            this.loadingTimers.delete(elementId);
+        }, delay);
+        
+        this.loadingTimers.set(elementId, timer);
+    }
+
+    hideLoadingImmediate(elementId) {
+        // Clear any pending timer
+        if (this.loadingTimers.has(elementId)) {
+            clearTimeout(this.loadingTimers.get(elementId));
+            this.loadingTimers.delete(elementId);
+        }
+        
+        // Hide loading immediately
+        const element = document.getElementById(elementId);
+        if (element) {
+            element.style.display = 'none';
+        }
     }
 
     async loadCountryStats() {
@@ -727,7 +763,7 @@ class NOAAWeatherVisualizer {
     async loadDefaultData() {
         // Load data with default selections on page load
         try {
-            document.getElementById('loading').style.display = 'block';
+            this.showLoadingDelayed('loading');
             await this.loadAndVisualizeData();
             // Update URL with current filter state
             // this.updateURLParams();
@@ -735,7 +771,7 @@ class NOAAWeatherVisualizer {
             console.error('Error loading default data:', error);
             this.showErrorMessage('Click "🔄 Refresh" to load weather data');
         } finally {
-            document.getElementById('loading').style.display = 'none';
+            this.hideLoadingImmediate('loading');
         }
     }
 
@@ -822,11 +858,11 @@ class NOAAWeatherVisualizer {
         // Clear existing chart immediately to prevent overlaps
         this.g.selectAll('*').remove();
 
-        // Show loading state
-        document.getElementById('loading').style.display = 'block';
+        // Show loading state with delay
+        this.showLoadingDelayed('loading');
         const refreshBtn = document.getElementById('load-data');
         const originalBtnText = refreshBtn.innerHTML;
-        refreshBtn.innerHTML = '⏳ Loading...';
+        refreshBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Loading...';
         refreshBtn.disabled = true;
 
         try {
@@ -848,7 +884,7 @@ class NOAAWeatherVisualizer {
             alert('Error loading data. Please try again.');
         } finally {
             // Reset loading state
-            document.getElementById('loading').style.display = 'none';
+            this.hideLoadingImmediate('loading');
             refreshBtn.innerHTML = originalBtnText;
             refreshBtn.disabled = false;
         }
@@ -893,7 +929,7 @@ class NOAAWeatherVisualizer {
         }
 
         try {
-            document.getElementById('map-loading').style.display = 'block';
+            this.showLoadingDelayed('map-loading');
             
             const country = document.getElementById('country-select').value;
             const state = document.getElementById('state-select').value;
@@ -930,7 +966,7 @@ class NOAAWeatherVisualizer {
                 .style('font-size', '16px')
                 .style('fill', '#e74c3c');
         } finally {
-            document.getElementById('map-loading').style.display = 'none';
+            this.hideLoadingImmediate('map-loading');
         }
     }
 
