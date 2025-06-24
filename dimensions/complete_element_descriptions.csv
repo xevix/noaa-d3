@@ -1,0 +1,214 @@
+Element,Description,Unit
+PRCP,Precipitation,tenths of mm
+SNOW,Snowfall,mm
+SNWD,Snow depth,mm
+TMAX,Maximum temperature,tenths of degrees C
+TMIN,Minimum temperature,tenths of degrees C
+ACMC,Average cloudiness midnight to midnight from 30-second ceilometer data,percent
+ACMH,Average cloudiness midnight to midnight from manual observations,percent
+ACSC,Average cloudiness sunrise to sunset from 30-second ceilometer data,percent
+ACSH,Average cloudiness sunrise to sunset from manual observations,percent
+ADPT,Average Dew Point Temperature for the day,tenths of degrees C
+ASLP,Average Sea Level Pressure for the day,hPa * 10
+ASTP,Average Station Level Pressure for the day,hPa * 10
+AWBT,Average Wet Bulb Temperature for the day,tenths of degrees C
+AWDR,Average daily wind direction,degrees
+AWND,Average daily wind speed,tenths of meters per second
+DAEV,Number of days included in the multiday evaporation total (MDEV),days
+DAPR,Number of days included in the multiday precipiation total (MDPR),days
+DASF,Number of days included in the multiday snowfall total (MDSF),days
+DATN,Number of days included in the multiday minimum temperature (MDTN),days
+DATX,Number of days included in the multiday maximum temperature (MDTX),days
+DAWM,Number of days included in the multiday wind movement (MDWM),days
+DWPR,Number of days with non-zero precipitation included in multiday precipitation total (MDPR),days
+EVAP,Evaporation of water from evaporation pan,tenths of mm
+FMTM,Time of fastest mile or fastest 1-minute wind,HHMM
+FRGB,Base of frozen ground layer,cm
+FRGT,Top of frozen ground layer,cm
+FRTH,Thickness of frozen ground layer,cm
+GAHT,Difference between river and gauge height,cm
+MDEV,Multiday evaporation total (use with DAEV),tenths of mm
+MDPR,Multiday precipitation total (use with DAPR and DWPR),tenths of mm
+MDSF,Multiday snowfall total,mm
+MDTN,Multiday minimum temperature (use with DATN),tenths of degrees C
+MDTX,Multiday maximum temperature (use with DATX),tenths of degrees C
+MDWM,Multiday wind movement,km
+MNPN,Daily minimum temperature of water in an evaporation pan,tenths of degrees C
+MXPN,Daily maximum temperature of water in an evaporation pan,tenths of degrees C
+PGTM,Peak gust time,HHMM
+PSUN,Daily percent of possible sunshine,percent
+RHAV,Average relative humidity for the day,percent
+RHMN,Minimum relative humidity for the day,percent
+RHMX,Maximum relative humidity for the day,percent
+SN01,Minimum soil temperature (unknown ground cover at 5 cm depth),tenths of degrees C
+SN02,Minimum soil temperature (unknown ground cover at 10 cm depth),tenths of degrees C
+SN03,Minimum soil temperature (unknown ground cover at 20 cm depth),tenths of degrees C
+SN04,Minimum soil temperature (unknown ground cover at 50 cm depth),tenths of degrees C
+SN05,Minimum soil temperature (unknown ground cover at 100 cm depth),tenths of degrees C
+SN06,Minimum soil temperature (unknown ground cover at 150 cm depth),tenths of degrees C
+SN07,Minimum soil temperature (unknown ground cover at 180 cm depth),tenths of degrees C
+SN11,Minimum soil temperature (grass at 5 cm depth),tenths of degrees C
+SN12,Minimum soil temperature (grass at 10 cm depth),tenths of degrees C
+SN13,Minimum soil temperature (grass at 20 cm depth),tenths of degrees C
+SN14,Minimum soil temperature (grass at 50 cm depth),tenths of degrees C
+SN15,Minimum soil temperature (grass at 100 cm depth),tenths of degrees C
+SN16,Minimum soil temperature (grass at 150 cm depth),tenths of degrees C
+SN17,Minimum soil temperature (grass at 180 cm depth),tenths of degrees C
+SN21,Minimum soil temperature (fallow at 5 cm depth),tenths of degrees C
+SN22,Minimum soil temperature (fallow at 10 cm depth),tenths of degrees C
+SN23,Minimum soil temperature (fallow at 20 cm depth),tenths of degrees C
+SN24,Minimum soil temperature (fallow at 50 cm depth),tenths of degrees C
+SN25,Minimum soil temperature (fallow at 100 cm depth),tenths of degrees C
+SN26,Minimum soil temperature (fallow at 150 cm depth),tenths of degrees C
+SN27,Minimum soil temperature (fallow at 180 cm depth),tenths of degrees C
+SN31,Minimum soil temperature (bare ground at 5 cm depth),tenths of degrees C
+SN32,Minimum soil temperature (bare ground at 10 cm depth),tenths of degrees C
+SN33,Minimum soil temperature (bare ground at 20 cm depth),tenths of degrees C
+SN34,Minimum soil temperature (bare ground at 50 cm depth),tenths of degrees C
+SN35,Minimum soil temperature (bare ground at 100 cm depth),tenths of degrees C
+SN36,Minimum soil temperature (bare ground at 150 cm depth),tenths of degrees C
+SN37,Minimum soil temperature (bare ground at 180 cm depth),tenths of degrees C
+SN41,Minimum soil temperature (brome grass at 5 cm depth),tenths of degrees C
+SN42,Minimum soil temperature (brome grass at 10 cm depth),tenths of degrees C
+SN43,Minimum soil temperature (brome grass at 20 cm depth),tenths of degrees C
+SN44,Minimum soil temperature (brome grass at 50 cm depth),tenths of degrees C
+SN45,Minimum soil temperature (brome grass at 100 cm depth),tenths of degrees C
+SN46,Minimum soil temperature (brome grass at 150 cm depth),tenths of degrees C
+SN47,Minimum soil temperature (brome grass at 180 cm depth),tenths of degrees C
+SN51,Minimum soil temperature (sod at 5 cm depth),tenths of degrees C
+SN52,Minimum soil temperature (sod at 10 cm depth),tenths of degrees C
+SN53,Minimum soil temperature (sod at 20 cm depth),tenths of degrees C
+SN54,Minimum soil temperature (sod at 50 cm depth),tenths of degrees C
+SN55,Minimum soil temperature (sod at 100 cm depth),tenths of degrees C
+SN56,Minimum soil temperature (sod at 150 cm depth),tenths of degrees C
+SN57,Minimum soil temperature (sod at 180 cm depth),tenths of degrees C
+SN61,Minimum soil temperature (straw mulch at 5 cm depth),tenths of degrees C
+SN62,Minimum soil temperature (straw mulch at 10 cm depth),tenths of degrees C
+SN63,Minimum soil temperature (straw mulch at 20 cm depth),tenths of degrees C
+SN64,Minimum soil temperature (straw mulch at 50 cm depth),tenths of degrees C
+SN65,Minimum soil temperature (straw mulch at 100 cm depth),tenths of degrees C
+SN66,Minimum soil temperature (straw mulch at 150 cm depth),tenths of degrees C
+SN67,Minimum soil temperature (straw mulch at 180 cm depth),tenths of degrees C
+SN71,Minimum soil temperature (grass muck at 5 cm depth),tenths of degrees C
+SN72,Minimum soil temperature (grass muck at 10 cm depth),tenths of degrees C
+SN73,Minimum soil temperature (grass muck at 20 cm depth),tenths of degrees C
+SN74,Minimum soil temperature (grass muck at 50 cm depth),tenths of degrees C
+SN75,Minimum soil temperature (grass muck at 100 cm depth),tenths of degrees C
+SN76,Minimum soil temperature (grass muck at 150 cm depth),tenths of degrees C
+SN77,Minimum soil temperature (grass muck at 180 cm depth),tenths of degrees C
+SN81,Minimum soil temperature (bare muck at 5 cm depth),tenths of degrees C
+SN82,Minimum soil temperature (bare muck at 10 cm depth),tenths of degrees C
+SN83,Minimum soil temperature (bare muck at 20 cm depth),tenths of degrees C
+SN84,Minimum soil temperature (bare muck at 50 cm depth),tenths of degrees C
+SN85,Minimum soil temperature (bare muck at 100 cm depth),tenths of degrees C
+SN86,Minimum soil temperature (bare muck at 150 cm depth),tenths of degrees C
+SN87,Minimum soil temperature (bare muck at 180 cm depth),tenths of degrees C
+SX01,Maximum soil temperature (unknown ground cover at 5 cm depth),tenths of degrees C
+SX02,Maximum soil temperature (unknown ground cover at 10 cm depth),tenths of degrees C
+SX03,Maximum soil temperature (unknown ground cover at 20 cm depth),tenths of degrees C
+SX04,Maximum soil temperature (unknown ground cover at 50 cm depth),tenths of degrees C
+SX05,Maximum soil temperature (unknown ground cover at 100 cm depth),tenths of degrees C
+SX06,Maximum soil temperature (unknown ground cover at 150 cm depth),tenths of degrees C
+SX07,Maximum soil temperature (unknown ground cover at 180 cm depth),tenths of degrees C
+SX11,Maximum soil temperature (grass at 5 cm depth),tenths of degrees C
+SX12,Maximum soil temperature (grass at 10 cm depth),tenths of degrees C
+SX13,Maximum soil temperature (grass at 20 cm depth),tenths of degrees C
+SX14,Maximum soil temperature (grass at 50 cm depth),tenths of degrees C
+SX15,Maximum soil temperature (grass at 100 cm depth),tenths of degrees C
+SX16,Maximum soil temperature (grass at 150 cm depth),tenths of degrees C
+SX17,Maximum soil temperature (grass at 180 cm depth),tenths of degrees C
+SX21,Maximum soil temperature (fallow at 5 cm depth),tenths of degrees C
+SX22,Maximum soil temperature (fallow at 10 cm depth),tenths of degrees C
+SX23,Maximum soil temperature (fallow at 20 cm depth),tenths of degrees C
+SX24,Maximum soil temperature (fallow at 50 cm depth),tenths of degrees C
+SX25,Maximum soil temperature (fallow at 100 cm depth),tenths of degrees C
+SX26,Maximum soil temperature (fallow at 150 cm depth),tenths of degrees C
+SX27,Maximum soil temperature (fallow at 180 cm depth),tenths of degrees C
+SX31,Maximum soil temperature (bare ground at 5 cm depth),tenths of degrees C
+SX32,Maximum soil temperature (bare ground at 10 cm depth),tenths of degrees C
+SX33,Maximum soil temperature (bare ground at 20 cm depth),tenths of degrees C
+SX34,Maximum soil temperature (bare ground at 50 cm depth),tenths of degrees C
+SX35,Maximum soil temperature (bare ground at 100 cm depth),tenths of degrees C
+SX36,Maximum soil temperature (bare ground at 150 cm depth),tenths of degrees C
+SX37,Maximum soil temperature (bare ground at 180 cm depth),tenths of degrees C
+SX41,Maximum soil temperature (brome grass at 5 cm depth),tenths of degrees C
+SX42,Maximum soil temperature (brome grass at 10 cm depth),tenths of degrees C
+SX43,Maximum soil temperature (brome grass at 20 cm depth),tenths of degrees C
+SX44,Maximum soil temperature (brome grass at 50 cm depth),tenths of degrees C
+SX45,Maximum soil temperature (brome grass at 100 cm depth),tenths of degrees C
+SX46,Maximum soil temperature (brome grass at 150 cm depth),tenths of degrees C
+SX47,Maximum soil temperature (brome grass at 180 cm depth),tenths of degrees C
+SX51,Maximum soil temperature (sod at 5 cm depth),tenths of degrees C
+SX52,Maximum soil temperature (sod at 10 cm depth),tenths of degrees C
+SX53,Maximum soil temperature (sod at 20 cm depth),tenths of degrees C
+SX54,Maximum soil temperature (sod at 50 cm depth),tenths of degrees C
+SX55,Maximum soil temperature (sod at 100 cm depth),tenths of degrees C
+SX56,Maximum soil temperature (sod at 150 cm depth),tenths of degrees C
+SX57,Maximum soil temperature (sod at 180 cm depth),tenths of degrees C
+SX61,Maximum soil temperature (straw mulch at 5 cm depth),tenths of degrees C
+SX62,Maximum soil temperature (straw mulch at 10 cm depth),tenths of degrees C
+SX63,Maximum soil temperature (straw mulch at 20 cm depth),tenths of degrees C
+SX64,Maximum soil temperature (straw mulch at 50 cm depth),tenths of degrees C
+SX65,Maximum soil temperature (straw mulch at 100 cm depth),tenths of degrees C
+SX66,Maximum soil temperature (straw mulch at 150 cm depth),tenths of degrees C
+SX67,Maximum soil temperature (straw mulch at 180 cm depth),tenths of degrees C
+SX71,Maximum soil temperature (grass muck at 5 cm depth),tenths of degrees C
+SX72,Maximum soil temperature (grass muck at 10 cm depth),tenths of degrees C
+SX73,Maximum soil temperature (grass muck at 20 cm depth),tenths of degrees C
+SX74,Maximum soil temperature (grass muck at 50 cm depth),tenths of degrees C
+SX75,Maximum soil temperature (grass muck at 100 cm depth),tenths of degrees C
+SX76,Maximum soil temperature (grass muck at 150 cm depth),tenths of degrees C
+SX77,Maximum soil temperature (grass muck at 180 cm depth),tenths of degrees C
+SX81,Maximum soil temperature (bare muck at 5 cm depth),tenths of degrees C
+SX82,Maximum soil temperature (bare muck at 10 cm depth),tenths of degrees C
+SX83,Maximum soil temperature (bare muck at 20 cm depth),tenths of degrees C
+SX84,Maximum soil temperature (bare muck at 50 cm depth),tenths of degrees C
+SX85,Maximum soil temperature (bare muck at 100 cm depth),tenths of degrees C
+SX86,Maximum soil temperature (bare muck at 150 cm depth),tenths of degrees C
+SX87,Maximum soil temperature (bare muck at 180 cm depth),tenths of degrees C
+TAXN,Average daily temperature computed as (TMAX+TMIN)/2.0,tenths of degrees C
+TAVG,Average daily temperature,tenths of degrees C
+THIC,Thickness of ice on water,tenths of mm
+TOBS,Temperature at the time of observation,tenths of degrees C
+TSUN,Daily total sunshine,minutes
+WDF1,Direction of fastest 1-minute wind,degrees
+WDF2,Direction of fastest 2-minute wind,degrees
+WDF5,Direction of fastest 5-second wind,degrees
+WDFG,Direction of peak wind gust,degrees
+WDFI,Direction of highest instantaneous wind,degrees
+WDFM,Fastest mile wind direction,degrees
+WDMV,24-hour wind movement,km
+WESD,Water equivalent of snow on the ground,tenths of mm
+WESF,Water equivalent of snowfall,tenths of mm
+WSF1,Fastest 1-minute wind speed,tenths of meters per second
+WSF2,Fastest 2-minute wind speed,tenths of meters per second
+WSF5,Fastest 5-second wind speed,tenths of meters per second
+WSFG,Peak gust wind speed,tenths of meters per second
+WSFI,Highest instantaneous wind speed,tenths of meters per second
+WSFM,Fastest mile wind speed,tenths of meters per second
+WT01,Weather Type: Fog ice fog or freezing fog (may include heavy fog),binary flag
+WT02,Weather Type: Heavy fog or heaving freezing fog (not always distinguished from fog),binary flag
+WT03,Weather Type: Thunder,binary flag
+WT04,Weather Type: Ice pellets sleet snow pellets or small hail,binary flag
+WT05,Weather Type: Hail (may include small hail),binary flag
+WT06,Weather Type: Glaze or rime,binary flag
+WT07,Weather Type: Dust volcanic ash blowing dust blowing sand or blowing obstruction,binary flag
+WT08,Weather Type: Smoke or haze,binary flag
+WT09,Weather Type: Blowing or drifting snow,binary flag
+WT10,Weather Type: Tornado waterspout or funnel cloud,binary flag
+WT11,Weather Type: High or damaging winds,binary flag
+WT12,Weather Type: Blowing spray,binary flag
+WT13,Weather Type: Mist,binary flag
+WT14,Weather Type: Drizzle,binary flag
+WT15,Weather Type: Freezing drizzle,binary flag
+WT16,Weather Type: Rain (may include freezing rain drizzle and freezing drizzle),binary flag
+WT17,Weather Type: Freezing rain,binary flag
+WT18,Weather Type: Snow snow pellets snow grains or ice crystals,binary flag
+WT19,Weather Type: Unknown source of precipitation,binary flag
+WT21,Weather Type: Ground fog,binary flag
+WT22,Weather Type: Ice fog or freezing fog,binary flag
+WV01,Weather in Vicinity: Fog ice fog or freezing fog (may include heavy fog),binary flag
+WV03,Weather in Vicinity: Thunder,binary flag
+WV07,Weather in Vicinity: Ash dust sand or other blowing obstruction,binary flag
+WV18,Weather in Vicinity: Snow or ice crystals,binary flag
+WV20,Weather in Vicinity: Rain or snow shower,binary flag

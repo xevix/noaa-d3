@@ -31,6 +31,20 @@ import duckdb
 # HCN/CRN FLAG 77-79   Character
 # WMO ID       81-85   Character
 # ------------------------------
+# V. FORMAT OF "ghcnd-countries.txt"
+# ------------------------------
+# Variable   Columns   Type
+# ------------------------------
+# CODE          1-2    Character
+# NAME          4-64   Character
+# ------------------------------
+# VI. FORMAT OF "ghcnd-states.txt"
+# ------------------------------
+# Variable   Columns   Type
+# ------------------------------
+# CODE          1-2    Character
+# NAME         4-50    Character
+# ------------------------------
 
 # Convert the above list into a list of column names and start positions but not the end positions, one tuple each
 column_names_and_start_positions = {'stations': [
@@ -43,8 +57,13 @@ column_names_and_start_positions = {'stations': [
     ('GSN FLAG', 73),
     ('HCN/CRN FLAG', 77),
     ('WMO ID', 81),
+], 'countries': [
+    ('CODE', 1),
+    ('NAME', 4),
+], 'states': [
+    ('CODE', 1),
+    ('NAME', 4),
 ]}
-
 
 def extract_columns(line, column_starts):
     """
@@ -141,18 +160,11 @@ def convert_to_parquet(input_filepath, output_filepath):
     """
     Convert a CSV file to a Parquet file using DuckDB.
     """
+    print(f"Converting {input_filepath} to {output_filepath}")
     duckdb.sql(f"COPY (FROM '{input_filepath}') TO '{output_filepath}' (PARQUET_VERSION V2, COMPRESSION ZSTD)")
-
-def main():
-    """Main entry point for the script."""
-    if len(sys.argv) != 2:
-        print(f"Usage: python {sys.argv[0]} <data_set_name>")
-        print("\nThis script converts a fixed-width space-separated file to a")
-        print("pipe-delimited CSV file. The data set name is used to determine")
-        print("the column names and start positions.")
-        sys.exit(1)
+    print(f"Converted {input_filepath} to {output_filepath}")
     
-    data_set_name = sys.argv[1]
+def convert_data_set(data_set_name):
     input_filepath = f"data/ghcnd-{data_set_name}.txt"
     output_filepath = f"data/ghcnd-{data_set_name}.csv"
     # If the parquet file doesn't exist, convert the CSV to parquet 
@@ -164,6 +176,20 @@ def main():
     else:
         print(f"Parquet file '{parquet_filepath}' already exists. Skipping conversion.")
 
+def main():
+    # If no args are present, process all data sets
+    if len(sys.argv) == 1:
+        for data_set_name in sorted(column_names_and_start_positions.keys()):
+            convert_data_set(data_set_name)
+    elif len(sys.argv) == 2:
+        convert_data_set(sys.argv[1])
+    else:
+        print(f"Usage: python {sys.argv[0]} [<data_set_name>]")
+        print("\nThis script converts a fixed-width space-separated file to a")
+        print("pipe-delimited CSV file. The data set name is used to determine")
+        print("the column names and start positions.")
+        print("If no data set name is provided, all data sets will be processed.")
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()

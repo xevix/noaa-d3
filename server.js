@@ -310,7 +310,7 @@ app.get('/api/elements/:year', async (req, res) => {
         )).sort();
         // Optionally, add descriptions as before (reuse existing logic if needed)
         // Get element descriptions from CSV
-        const csvPath = await ensureLocalLookupFile('complete_element_descriptions.csv', 'parquet/complete_element_descriptions.csv');
+        const csvPath = "dimensions/complete_element_descriptions.csv";
         const query = `
             SELECT Element, Description, Unit
             FROM read_csv('${csvPath}', header=true)

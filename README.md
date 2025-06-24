@@ -11,6 +11,8 @@ A D3.js-based web application for visualizing NOAA weather data stored in Parque
 - **Responsive Design**: Clean, modern interface that works on different screen sizes
 
 ## Prerequisites
+- uv (Python package manager) - for running Python scripts to fetch data
+- AWS CLI - for downloading data from S3
 
 - Node.js (v14 or higher)
 - NOAA weather data in Parquet format stored at `data/by_year/`
@@ -21,6 +23,10 @@ A D3.js-based web application for visualizing NOAA weather data stored in Parque
 2. Install dependencies:
    ```bash
    npm install
+   ```
+3. Fetch dimensions
+   ```bash
+   npm run fetch-metadata
    ```
 
 ## Usage
