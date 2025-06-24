@@ -50,9 +50,9 @@
         }
         
         .main-container {
-            max-width: 1400px;
-            margin: 0 auto;
-            padding: 2rem 1rem;
+            width: 100%;
+            margin: 0;
+            padding: 2rem;
             background: var(--background-color);
             min-height: 100vh;
         }
@@ -82,7 +82,7 @@
         
         .dashboard-grid {
             display: grid;
-            grid-template-columns: 1fr 2fr;
+            grid-template-columns: 450px 1.2fr 1fr;
             gap: 2rem;
             margin-bottom: 2rem;
         }
@@ -284,12 +284,11 @@
             border-radius: 0;
         }
         
-        .world-map-section {
+        .world-map-card {
             background: var(--surface-color);
             border-radius: var(--radius-xl);
             box-shadow: var(--shadow-xl);
             border: 1px solid var(--border-color);
-            margin-top: 2rem;
             overflow: hidden;
         }
         
@@ -314,7 +313,7 @@
         }
         
         #map-container {
-            height: 500px;
+            height: 600px;
             position: relative;
             background: var(--surface-color);
             border-radius: 0;
@@ -534,9 +533,24 @@
             stroke-width: 3;
         }
         
-        @media (max-width: 1024px) {
+        @media (max-width: 1400px) {
+            .dashboard-grid {
+                grid-template-columns: 400px 1.2fr 1fr;
+                gap: 1.5rem;
+            }
+        }
+        
+        @media (max-width: 1200px) {
+            .dashboard-grid {
+                grid-template-columns: 350px 1.1fr 1fr;
+                gap: 1rem;
+            }
+        }
+        
+        @media (max-width: 1000px) {
             .dashboard-grid {
                 grid-template-columns: 1fr;
+                gap: 2rem;
             }
             
             .controls-row {
@@ -703,20 +717,21 @@
                 </div>
                 <div class="legend" id="legend"></div>
             </div>
-        </div>
-        
-        <div class="world-map-section">
-            <div class="map-header">
-                <h3><i class="fas fa-globe-americas"></i> Global Weather Map</h3>
-                <p>Geographic distribution of weather patterns worldwide</p>
-            </div>
-            <div id="map-container">
-                <div id="map-loading" class="loading" style="display: none;">
-                    <div class="spinner"></div>
-                    <div class="loading-text">Loading world map...</div>
+            
+            <div class="world-map-card">
+                <div class="map-header">
+                    <h3><i class="fas fa-globe-americas"></i> Global Weather Map</h3>
+                    <p>Geographic distribution of weather patterns worldwide</p>
+                </div>
+                <div id="map-container">
+                    <div id="map-loading" class="loading" style="display: none;">
+                        <div class="spinner"></div>
+                        <div class="loading-text">Loading world map...</div>
+                    </div>
                 </div>
             </div>
         </div>
+
         
         <div id="data-table-container" class="data-table-section" style="display: none;">
             <div class="table-header">
