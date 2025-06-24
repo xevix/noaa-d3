@@ -1,0 +1,20 @@
+{
+  "watch": [
+    "server.js"
+  ],
+  "ignore": [
+    "node_modules/",
+    "__tests__/",
+    "coverage/",
+    "*.test.js",
+    "*.spec.js",
+    "app.js",
+    "index.html"
+  ],
+  "ext": "js,json",
+  "env": {
+    "NODE_ENV": "development"
+  },
+  "delay": 1000,
+  "verbose": true
+} 
