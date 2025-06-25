@@ -753,6 +753,22 @@ function convertValue(value, element) {
     return value;
 }
 
+app.get('/api/element-unit/:element', async (req, res) => {
+    const { element } = req.params;
+    const csvPath = path.join(__dirname, 'dimensions/complete_element_descriptions.csv');
+    const query = `SELECT Unit FROM read_csv_auto('${csvPath}') WHERE Element = '${element}' LIMIT 1`;
+    profileQuery('all', query, (err, result) => {
+        if (err) {
+            console.error('DuckDB error getting unit:', err);
+            res.status(500).json({ error: 'Failed to get unit' });
+        } else if (result.length === 0) {
+            res.json({ unit: null });
+        } else {
+            res.json({ unit: result[0].Unit });
+        }
+    });
+});
+
 app.listen(port, () => {
     console.log(`NOAA Weather Visualization server running at http://localhost:${port}`);
 });

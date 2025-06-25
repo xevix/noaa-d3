@@ -588,8 +588,10 @@ class NOAAWeatherVisualizer {
         tableContainer.style.display = this.showTable ? 'block' : 'none';
     }
 
-    populateCountryStatsTable() {
+    async populateCountryStatsTable() {
         if (!this.currentCountryStats || !this.showTable) return;
+
+        await this.updateTableHeaderUnits();
 
         const tableBody = document.getElementById('data-table-body');
         const tableInfo = document.getElementById('table-info');
@@ -2106,6 +2108,32 @@ LIMIT 1000;
         if (this.loadingTimers.has(elementId)) {
             clearTimeout(this.loadingTimers.get(elementId));
             this.loadingTimers.delete(elementId);
+        }
+    }
+
+    async updateTableHeaderUnits() {
+        const element = document.getElementById('element-select').value;
+        let unit = '';
+        try {
+            const response = await fetch(`/api/element-unit/${element}`);
+            if (response.ok) {
+                const data = await response.json();
+                unit = data.unit || '';
+            }
+        } catch (e) {
+            // Fallback: leave unit as empty string
+        }
+        const valueLabel = unit ? `Value (${unit})` : 'Value';
+
+        // Update Max Value header
+        const maxValueTh = document.querySelector('th[data-column="maxValue"]');
+        if (maxValueTh) {
+            maxValueTh.innerHTML = `<i class=\"fas fa-arrow-up\"></i> Max ${valueLabel} <span class=\"sort-indicator\"></span>`;
+        }
+        // Update Min Value header
+        const minValueTh = document.querySelector('th[data-column="minValue"]');
+        if (minValueTh) {
+            minValueTh.innerHTML = `<i class=\"fas fa-arrow-down\"></i> Min ${valueLabel} <span class=\"sort-indicator\"></span>`;
         }
     }
 }
