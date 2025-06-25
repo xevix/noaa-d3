@@ -1375,7 +1375,7 @@ class NOAAWeatherVisualizer {
         return labels[element] || 'Value';
     }
 
-    visualizeData(data, chartType, element) {
+    async visualizeData(data, chartType, element) {
         // JIT (Just-In-Time) sizing: get dimensions right before drawing
         const container = d3.select('#chart-container');
         const containerRect = container.node().getBoundingClientRect();
@@ -1401,6 +1401,34 @@ class NOAAWeatherVisualizer {
         } else {
             instructions.style.display = 'none';
         }
+
+        // --- UNITS LABEL LOGIC ---
+        const unitsLabelDiv = document.getElementById('units-label');
+        if (['line', 'bar', 'heatmap'].includes(chartType)) {
+            // Fetch the unit for the current element
+            try {
+                const response = await fetch(`/api/element-unit/${element}`);
+                let unit = '';
+                if (response.ok) {
+                    const data = await response.json();
+                    unit = data.unit || '';
+                }
+                if (unit) {
+                    unitsLabelDiv.textContent = `Unit: ${unit}`;
+                    unitsLabelDiv.style.display = 'block';
+                } else {
+                    unitsLabelDiv.textContent = '';
+                    unitsLabelDiv.style.display = 'none';
+                }
+            } catch (e) {
+                unitsLabelDiv.textContent = '';
+                unitsLabelDiv.style.display = 'none';
+            }
+        } else {
+            unitsLabelDiv.textContent = '';
+            unitsLabelDiv.style.display = 'none';
+        }
+        // --- END UNITS LABEL LOGIC ---
 
         if (!data || data.length === 0) {
             this.g.append('text')
