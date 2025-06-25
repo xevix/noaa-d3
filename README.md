@@ -15,7 +15,6 @@ Data is sourced from [NOAA via AWS S3](https://registry.opendata.aws/noaa-ghcn/)
 - **Responsive Design**: Clean, modern interface that works on different screen sizes
 
 ## Prerequisites
-- [uv (Python package manager)](https://docs.astral.sh/uv/getting-started/installation/) - for running Python scripts to fetch data
 - [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html) - for downloading data from S3
 - [Node.js](https://nodejs.org/en/download) (v14 or higher)
 
