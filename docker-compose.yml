@@ -1,0 +1,16 @@
+version: '3.8'
+services:
+  noaa-d3:
+    build: .
+    container_name: noaa-d3-dev
+    volumes:
+      - .:/usr/src/app
+      - ./data:/usr/src/app/data
+      - /usr/src/app/node_modules
+    ports:
+      - "3000:3000"
+      - "3001:3001"
+      - "3002:3002"
+    environment:
+      - NODE_ENV=development
+    command: npm run dev 

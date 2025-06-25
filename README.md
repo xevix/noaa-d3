@@ -30,6 +30,20 @@ Data is sourced from [NOAA via AWS S3](https://registry.opendata.aws/noaa-ghcn/)
    npm run fetch-metadata
    ```
 
+---
+
+### Alternatively: Run with Docker Compose
+
+If you prefer to use Docker, you can get up and running with a single command:
+
+```bash
+docker-compose up
+```
+
+This will build the Docker image (if needed) and start the development server inside a container. The app will be available at `http://localhost:3001`.
+
+---
+
 ## Usage
 
 1. Start the server:
