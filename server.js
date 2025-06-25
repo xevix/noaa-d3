@@ -36,7 +36,7 @@ function profileQuery(method, sql, ...args) {
     return connection[method](sql, ...args);
 }
 
-async function ensureLocalData(year, element) {
+async function ensureLocalData(year, element, forceRedownload = false) {
     // Always use DuckDB COPY to download S3 parquet files to local, then query locally
     const localDir = path.join(LOCAL_DATA_ROOT, `by_year/YEAR=${year}/ELEMENT=${element}`);
     if (!fs.existsSync(localDir)) {
@@ -45,7 +45,7 @@ async function ensureLocalData(year, element) {
     const s3ParquetPath = `s3://${S3_BUCKET}/${S3_PREFIX}/YEAR=${year}/ELEMENT=${element}/*.parquet`;
     const localParquetFile = path.join(localDir, 'data.parquet');
     // If the local file exists and is non-empty, use it
-    if (fs.existsSync(localParquetFile) && fs.statSync(localParquetFile).size > 0) {
+    if (!forceRedownload && fs.existsSync(localParquetFile) && fs.statSync(localParquetFile).size > 0) {
         return { path: localParquetFile, downloaded: false };
     }
     // Remove any existing local parquet files first (to avoid partial/corrupt data)
@@ -627,10 +627,11 @@ app.get('/api/weather/:year/:element', async (req, res) => {
     const station = req.query.station; // Optional station filter
     const country = req.query.country; // Optional country filter
     const state = req.query.state; // Optional state filter
+    const forceRedownload = req.query.forceRedownload === '1';
 
     try {
         // Ensure data is present
-        const dataResult = await ensureLocalData(year, element);
+        const dataResult = await ensureLocalData(year, element, forceRedownload);
         const dataPath = dataResult.path;
         if (dataResult.downloaded) {
             res.set('X-Noaa-Download', 'true');

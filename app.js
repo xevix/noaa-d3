@@ -33,14 +33,9 @@ class NOAAWeatherVisualizer {
             this.loadAndVisualizeData();
         });
 
-        // Copy query button
-        document.getElementById('copy-query').addEventListener('click', () => {
-            this.copyQueryToClipboard();
-        });
-
-        // Copy stations query button
-        document.getElementById('copy-stations-query').addEventListener('click', () => {
-            this.copyStationsQueryToClipboard();
+        // Redownload data button
+        document.getElementById('redownload-data').addEventListener('click', () => {
+            this.loadAndVisualizeData(true);
         });
 
         // Table view toggle
@@ -883,7 +878,7 @@ class NOAAWeatherVisualizer {
         }
     }
 
-    async loadAndVisualizeData() {
+    async loadAndVisualizeData(forceRedownload = false) {
         // Clear any error message or overlay before starting a new load
         this.clearErrorMessage && this.clearErrorMessage();
         if (this.g && this.g.selectAll) {
@@ -910,7 +905,7 @@ class NOAAWeatherVisualizer {
                     this.showLoadingDelayed('loading');
                     this.setLoadingMessage('Loading weather data...');
                 }
-            });
+            }, forceRedownload);
             this.currentData = data;
             this.originalData = [...data];
             this.zoomExtent = null;
@@ -930,7 +925,7 @@ class NOAAWeatherVisualizer {
         }
     }
 
-    async queryWeatherData(year, element, station = null, loadingUICallback) {
+    async queryWeatherData(year, element, station = null, loadingUICallback, forceRedownload = false) {
         try {
             const params = new URLSearchParams({ limit: 5000 });
             if (station) {
@@ -944,6 +939,9 @@ class NOAAWeatherVisualizer {
             }
             if (state) {
                 params.append('state', state);
+            }
+            if (forceRedownload) {
+                params.append('forceRedownload', '1');
             }
             const response = await fetch(`/api/weather/${year}/${element}?${params}`);
             // Decide which loading UI to show based on header
@@ -2009,27 +2007,6 @@ LIMIT 5000;
         `;
 
         return query.trim();
-    }
-
-    async copyQueryToClipboard() {
-        try {
-            const query = this.generateCurrentQuery();
-            await navigator.clipboard.writeText(query);
-            
-            // Show visual feedback
-            const button = document.getElementById('copy-query');
-            const originalText = button.textContent;
-            button.textContent = '✅ Copied!';
-            button.style.backgroundColor = '#27ae60';
-            
-            setTimeout(() => {
-                button.textContent = originalText;
-                button.style.backgroundColor = '';
-            }, 2000);
-        } catch (err) {
-            console.error('Failed to copy query: ', err);
-            alert('Failed to copy query to clipboard');
-        }
     }
 
     generateStationsQuery() {
