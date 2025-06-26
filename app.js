@@ -2187,8 +2187,55 @@ LIMIT 1000;
             .attr('height', '100%');
         this.mapG = this.mapSvg.append('g');
 
+        // Lookup tables for US states and Canadian provinces
+        const usStates = [
+            'Alabama','Alaska','Arizona','Arkansas','California','Colorado','Connecticut','Delaware','Florida','Georgia','Hawaii','Idaho','Illinois','Indiana','Iowa','Kansas','Kentucky','Louisiana','Maine','Maryland','Massachusetts','Michigan','Minnesota','Mississippi','Missouri','Montana','Nebraska','Nevada','New Hampshire','New Jersey','New Mexico','New York','North Carolina','North Dakota','Ohio','Oklahoma','Oregon','Pennsylvania','Rhode Island','South Carolina','South Dakota','Tennessee','Texas','Utah','Vermont','Virginia','Washington','West Virginia','Wisconsin','Wyoming'
+        ];
+        const caProvinceNameMap = {
+            "AB": "Alberta",
+            "BC": "British Columbia",
+            "MB": "Manitoba",
+            "NB": "New Brunswick",
+            "NL": "Newfoundland and Labrador",
+            "NS": "Nova Scotia",
+            "NT": "Northwest Territories",
+            "NU": "Nunavut",
+            "ON": "Ontario",
+            "PE": "Prince Edward Island",
+            "QC": "Quebec",
+            "SK": "Saskatchewan",
+            "YT": "Yukon",
+            "BRITISH COLUMBIA": "British Columbia",
+            "ALBERTA": "Alberta",
+            "MANITOBA": "Manitoba",
+            "NEW BRUNSWICK": "New Brunswick",
+            "NEWFOUNDLAND AND LABRADOR": "Newfoundland and Labrador",
+            "NOVA SCOTIA": "Nova Scotia",
+            "NORTHWEST TERRITORIES": "Northwest Territories",
+            "NUNAVUT": "Nunavut",
+            "ONTARIO": "Ontario",
+            "PRINCE EDWARD ISLAND": "Prince Edward Island",
+            "QUEBEC": "Quebec",
+            "SASKATCHEWAN": "Saskatchewan",
+            "YUKON": "Yukon"
+        };
+        const caProvinces = Object.values(caProvinceNameMap);
+
+        // Normalize selectedState for lookup
+        let normalizedState = selectedState;
+        if (caProvinceNameMap[selectedState]) {
+            normalizedState = caProvinceNameMap[selectedState];
+        } else if (caProvinceNameMap[selectedState && selectedState.toUpperCase()]) {
+            normalizedState = caProvinceNameMap[selectedState.toUpperCase()];
+        }
+
+        // Check if it's a US state
+        const isUSState = usStates.map(s => s.toLowerCase()).includes(selectedState.toLowerCase());
+        // Check if it's a Canadian province
+        const isCAProvince = caProvinces.map(s => s.toLowerCase()).includes(normalizedState.toLowerCase());
+
         let mapData, features, projection, path;
-        if (selectedCountry === 'United States') {
+        if (isUSState) {
             // Load US states TopoJSON
             mapData = await fetch('data/us-states-10m.json').then(r => r.json());
             features = topojson.feature(mapData, mapData.objects.states).features;
@@ -2215,12 +2262,15 @@ LIMIT 1000;
                 .attr('fill', '#e0e7ef')
                 .attr('stroke', '#333')
                 .attr('stroke-width', 1.5);
-        } else if (selectedCountry === 'Canada') {
+        } else if (isCAProvince) {
             // Load Canada provinces GeoJSON
-            mapData = await fetch('data/canada-provinces-geo.json').then(r => r.json());
+            mapData = await fetch('data/canada-provinces-territories.geo.json').then(r => r.json());
             features = mapData.features;
             // Find the province feature by name (case-insensitive)
-            const provinceFeature = features.find(f => f.properties.name.toLowerCase() === selectedState.toLowerCase());
+            const provinceFeature = features.find(f => f.properties.prov_name_en && f.properties.prov_name_en.toLowerCase() === normalizedState.toLowerCase());
+            console.log("normalizedState", normalizedState);
+            console.log("provinceFeature", provinceFeature);
+            console.log("features", features);
             if (!provinceFeature) {
                 this.mapG.append('text')
                     .attr('x', this.mapWidth / 2)
@@ -2243,21 +2293,22 @@ LIMIT 1000;
                 .attr('stroke', '#333')
                 .attr('stroke-width', 1.5);
         } else {
-            // Not a supported country for state/province map
+            // Not a supported state/province
             this.mapG.append('text')
                 .attr('x', this.mapWidth / 2)
                 .attr('y', this.mapHeight / 2)
                 .attr('text-anchor', 'middle')
                 .style('font-size', '18px')
                 .style('fill', '#7f8c8d')
-                .text('State/province map not available for this country.');
+                .text('State/province map not available for this selection.');
             return;
         }
 
-        // Fetch stations for the selected state
+        // Fetch stations for the selected state/province
         const year = document.getElementById('year-select').value;
         const elementVal = document.getElementById('element-select').value;
-        const stationsResp = await fetch(`/api/stations/${year}/${elementVal}?country=${encodeURIComponent(selectedCountry)}&state=${encodeURIComponent(selectedState)}`);
+        const countryForStations = isUSState ? 'United States' : (isCAProvince ? 'Canada' : '');
+        const stationsResp = await fetch(`/api/stations/${year}/${elementVal}?country=${encodeURIComponent(countryForStations)}&state=${encodeURIComponent(selectedState)}`);
         let stations = [];
         if (stationsResp.ok) {
             stations = await stationsResp.json();
@@ -2302,7 +2353,7 @@ LIMIT 1000;
             .style('font-size', '18px')
             .style('font-weight', 'bold')
             .style('fill', '#2c3e50')
-            .text(`${selectedState}, ${selectedCountry}`);
+            .text(`${selectedState}${countryForStations ? ', ' + countryForStations : ''}`);
     }
 }
 
