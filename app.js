@@ -830,16 +830,14 @@ class NOAAWeatherVisualizer {
 
     setupChart() {
         const container = d3.select('#chart-container');
-
         this.margin = { top: 20, right: 80, bottom: 70, left: 80 };
-
-        // Create SVG elements without setting dimensions initially
+        // Remove any existing SVGs in chart container
+        container.selectAll('svg').remove();
+        // Create SVG elements for chart
         this.svg = container.append('svg');
         this.g = this.svg.append('g')
             .attr('transform', `translate(${this.margin.left},${this.margin.top})`);
-
         this.tooltip = d3.select('#tooltip');
-
         // Initialize zoom state
         this.zoomExtent = null;
         this.originalData = null;
@@ -848,11 +846,11 @@ class NOAAWeatherVisualizer {
 
     setupWorldMap() {
         const container = d3.select('#map-container');
-        
-        // Create SVG elements without setting dimensions initially
+        // Remove any existing SVGs in map container
+        container.selectAll('svg').remove();
+        // Create SVG elements for map
         this.mapSvg = container.append('svg');
         this.mapG = this.mapSvg.append('g');
-
         // Initialize world map data
         this.worldData = null;
         this.loadWorldMap();
@@ -1039,14 +1037,26 @@ class NOAAWeatherVisualizer {
         return mapping[name] || name;
     }
 
-    createWorldMap(worldData, element, selectedCountry, selectedState) {
+    async createWorldMap(worldData, element, selectedCountry, selectedState) {
+        // If a US state or Canadian province is selected, render the state/province map regardless of country dropdown
+        const usStates = [
+            'Alabama','Alaska','Arizona','Arkansas','California','Colorado','Connecticut','Delaware','Florida','Georgia','Hawaii','Idaho','Illinois','Indiana','Iowa','Kansas','Kentucky','Louisiana','Maine','Maryland','Massachusetts','Michigan','Minnesota','Mississippi','Missouri','Montana','Nebraska','Nevada','New Hampshire','New Jersey','New Mexico','New York','North Carolina','North Dakota','Ohio','Oklahoma','Oregon','Pennsylvania','Rhode Island','South Carolina','South Dakota','Tennessee','Texas','Utah','Vermont','Virginia','Washington','West Virginia','Wisconsin','Wyoming'
+        ];
+        const caProvinces = [
+            'Alberta','British Columbia','Manitoba','New Brunswick','Newfoundland and Labrador','Nova Scotia','Ontario','Prince Edward Island','Quebec','Saskatchewan','Northwest Territories','Nunavut','Yukon'
+        ];
+        if (selectedState && (usStates.map(s => s.toLowerCase()).includes(selectedState.toLowerCase()) || caProvinces.map(p => p.toLowerCase()).includes(selectedState.toLowerCase()))) {
+            // Determine country from state/province
+            let country = usStates.map(s => s.toLowerCase()).includes(selectedState.toLowerCase()) ? 'United States' : 'Canada';
+            await this.createStateOrProvinceMap(country, selectedState, element);
+            return;
+        }
         // Always clear the map container and append a fresh SVG and group
         const container = d3.select('#map-container');
         container.selectAll('svg').remove();
         const containerRect = container.node().getBoundingClientRect();
         this.mapWidth = containerRect.width;
         this.mapHeight = containerRect.height;
-
         this.mapSvg = container.append('svg')
             .attr('width', '100%')
             .attr('height', '100%');
@@ -2163,6 +2173,129 @@ LIMIT 1000;
         if (minValueTh) {
             minValueTh.innerHTML = `<i class=\"fas fa-arrow-down\"></i> Min ${valueLabel} <span class=\"sort-indicator\"></span>`;
         }
+    }
+
+    async createStateOrProvinceMap(selectedCountry, selectedState, element) {
+        // Clear the map container
+        const container = d3.select('#map-container');
+        container.selectAll('svg').remove();
+        const containerRect = container.node().getBoundingClientRect();
+        this.mapWidth = containerRect.width;
+        this.mapHeight = containerRect.height;
+        this.mapSvg = container.append('svg')
+            .attr('width', '100%')
+            .attr('height', '100%');
+        this.mapG = this.mapSvg.append('g');
+
+        let mapData, features, projection, path;
+        if (selectedCountry === 'United States') {
+            // Load US states TopoJSON
+            mapData = await fetch('data/us-states-10m.json').then(r => r.json());
+            features = topojson.feature(mapData, mapData.objects.states).features;
+            // Find the state feature by name (case-insensitive)
+            const stateFeature = features.find(f => f.properties.name.toLowerCase() === selectedState.toLowerCase());
+            if (!stateFeature) {
+                this.mapG.append('text')
+                    .attr('x', this.mapWidth / 2)
+                    .attr('y', this.mapHeight / 2)
+                    .attr('text-anchor', 'middle')
+                    .style('font-size', '18px')
+                    .style('fill', '#7f8c8d')
+                    .text(`State boundary not found for ${selectedState}`);
+                return;
+            }
+            // Fit projection to the state
+            projection = d3.geoAlbersUsa();
+            projection.fitSize([this.mapWidth, this.mapHeight], stateFeature);
+            path = d3.geoPath().projection(projection);
+            // Draw the state boundary
+            this.mapG.append('path')
+                .datum(stateFeature)
+                .attr('d', path)
+                .attr('fill', '#e0e7ef')
+                .attr('stroke', '#333')
+                .attr('stroke-width', 1.5);
+        } else if (selectedCountry === 'Canada') {
+            // Load Canada provinces GeoJSON
+            mapData = await fetch('data/canada-provinces-geo.json').then(r => r.json());
+            features = mapData.features;
+            // Find the province feature by name (case-insensitive)
+            const provinceFeature = features.find(f => f.properties.name.toLowerCase() === selectedState.toLowerCase());
+            if (!provinceFeature) {
+                this.mapG.append('text')
+                    .attr('x', this.mapWidth / 2)
+                    .attr('y', this.mapHeight / 2)
+                    .attr('text-anchor', 'middle')
+                    .style('font-size', '18px')
+                    .style('fill', '#7f8c8d')
+                    .text(`Province boundary not found for ${selectedState}`);
+                return;
+            }
+            // Fit projection to the province
+            projection = d3.geoMercator();
+            projection.fitSize([this.mapWidth, this.mapHeight], provinceFeature);
+            path = d3.geoPath().projection(projection);
+            // Draw the province boundary
+            this.mapG.append('path')
+                .datum(provinceFeature)
+                .attr('d', path)
+                .attr('fill', '#e0e7ef')
+                .attr('stroke', '#333')
+                .attr('stroke-width', 1.5);
+        } else {
+            // Not a supported country for state/province map
+            this.mapG.append('text')
+                .attr('x', this.mapWidth / 2)
+                .attr('y', this.mapHeight / 2)
+                .attr('text-anchor', 'middle')
+                .style('font-size', '18px')
+                .style('fill', '#7f8c8d')
+                .text('State/province map not available for this country.');
+            return;
+        }
+
+        // Fetch stations for the selected state
+        const year = document.getElementById('year-select').value;
+        const elementVal = document.getElementById('element-select').value;
+        const stationsResp = await fetch(`/api/stations/${year}/${elementVal}?country=${encodeURIComponent(selectedCountry)}&state=${encodeURIComponent(selectedState)}`);
+        let stations = [];
+        if (stationsResp.ok) {
+            stations = await stationsResp.json();
+        }
+
+        // Plot stations as circles
+        this.mapG.selectAll('.station-dot')
+            .data(stations)
+            .enter()
+            .append('circle')
+            .attr('class', 'station-dot')
+            .attr('cx', d => d.longitude && d.latitude ? projection([d.longitude, d.latitude])[0] : null)
+            .attr('cy', d => d.longitude && d.latitude ? projection([d.longitude, d.latitude])[1] : null)
+            .attr('r', 7)
+            .attr('fill', '#007bff')
+            .attr('stroke', '#fff')
+            .attr('stroke-width', 1.5)
+            .attr('opacity', 0.8)
+            .on('mouseover', (event, d) => {
+                this.tooltip
+                    .style('opacity', 1)
+                    .html(`<strong>${d.station_name}</strong><br/>Lat: ${d.latitude}<br/>Lon: ${d.longitude}${d.value !== undefined ? `<br/>Value: ${d.value}` : ''}`)
+                    .style('left', (event.pageX + 10) + 'px')
+                    .style('top', (event.pageY - 10) + 'px');
+            })
+            .on('mouseout', () => {
+                this.tooltip.style('opacity', 0);
+            });
+
+        // Add title
+        this.mapG.append('text')
+            .attr('x', this.mapWidth / 2)
+            .attr('y', 30)
+            .attr('text-anchor', 'middle')
+            .style('font-size', '18px')
+            .style('font-weight', 'bold')
+            .style('fill', '#2c3e50')
+            .text(`${selectedState}, ${selectedCountry}`);
     }
 }
 

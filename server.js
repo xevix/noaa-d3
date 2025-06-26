@@ -113,14 +113,12 @@ app.get('/api/stations/:year/:element', async (req, res) => {
 
         // Build geographic filter if needed
         let geoFilter = '';
-        if (country || state) {
-            geoFilter = `
-                AND (
-                    ${country ? `c.name = '${country}'` : '1=1'}
-                    ${country && state ? ' AND ' : ''}
-                    ${state ? `states.name = '${state}'` : ''}
-                )
-            `;
+        if (country && state) {
+            geoFilter = `\n                AND (c.name = '${country}' AND states.name = '${state}')\n            `;
+        } else if (country) {
+            geoFilter = `\n                AND (c.name = '${country}')\n            `;
+        } else if (state) {
+            geoFilter = `\n                AND (states.name = '${state}')\n            `;
         }
 
         const query = `
@@ -133,7 +131,9 @@ app.get('/api/stations/:year/:element', async (req, res) => {
                 s.station_id,
                 COALESCE(st.name, s.station_id) as station_name,
                 c.name as country_name,
-                states.name as state_name
+                states.name as state_name,
+                st.latitude as latitude,
+                st.longitude as longitude
             FROM available_stations s
             LEFT JOIN read_parquet('${stationsPath}') st
                 ON s.station_id = st.id
@@ -156,7 +156,9 @@ app.get('/api/stations/:year/:element', async (req, res) => {
                     id: String(row.station_id),
                     name: String(row.station_name || row.station_id),
                     country: row.country_name,
-                    state: row.state_name
+                    state: row.state_name,
+                    latitude: row.latitude !== undefined ? Number(row.latitude) : null,
+                    longitude: row.longitude !== undefined ? Number(row.longitude) : null
                 }));
 
                 console.log(`Found ${stations.length} stations for ${year}/${element}`);
@@ -520,14 +522,12 @@ app.get('/api/country-stats/:year/:element', async (req, res) => {
 
         // Build geographic filter if needed
         let geoFilter = '';
-        if (country || state) {
-            geoFilter = `
-                AND (
-                    ${country ? `c.name = '${country}'` : '1=1'}
-                    ${country && state ? ' AND ' : ''}
-                    ${state ? `states.name = '${state}'` : ''}
-                )
-            `;
+        if (country && state) {
+            geoFilter = `\n                AND (c.name = '${country}' AND states.name = '${state}')\n            `;
+        } else if (country) {
+            geoFilter = `\n                AND (c.name = '${country}')\n            `;
+        } else if (state) {
+            geoFilter = `\n                AND (states.name = '${state}')\n            `;
         }
 
         // Add date range filter if provided
