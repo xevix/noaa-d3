@@ -2338,7 +2338,7 @@ LIMIT 1000;
         } else {
             // Dynamic projection setup for Canada provinces - works for all provinces
             projection = d3.geoMercator();
-            const margin = {top: 60, right: 40, bottom: 40, left: 40};
+            const margin = {top: 200, right: 40, bottom: 200, left: 40};
             
             // Calculate bounds from ALL polygons
             let minLon = Infinity, maxLon = -Infinity, minLat = Infinity, maxLat = -Infinity;
