@@ -2264,6 +2264,13 @@ LIMIT 1000;
         }
 
         // Plot stations as circles
+        // Compute color scale based on station values (as in heatmap/world map)
+        const stationValues = stations.map(s => s.value).filter(v => v !== null && v !== undefined);
+        const dataExtent = d3.extent(stationValues);
+        const colorScale = d3.scaleSequential()
+            .interpolator(elementVal === 'PRCP' ? d3.interpolateBlues : d3.interpolateRdYlBu)
+            .domain(dataExtent);
+
         this.mapG.selectAll('.station-dot')
             .data(stations)
             .enter()
@@ -2272,14 +2279,14 @@ LIMIT 1000;
             .attr('cx', d => d.longitude && d.latitude ? projection([d.longitude, d.latitude])[0] : null)
             .attr('cy', d => d.longitude && d.latitude ? projection([d.longitude, d.latitude])[1] : null)
             .attr('r', 7)
-            .attr('fill', '#007bff')
+            .attr('fill', d => (d.value !== null && d.value !== undefined) ? colorScale(d.value) : '#f8f9fa')
             .attr('stroke', '#fff')
             .attr('stroke-width', 1.5)
             .attr('opacity', 0.8)
             .on('mouseover', (event, d) => {
                 this.tooltip
                     .style('opacity', 1)
-                    .html(`<strong>${d.station_name}</strong><br/>Lat: ${d.latitude}<br/>Lon: ${d.longitude}${d.value !== undefined ? `<br/>Value: ${d.value}` : ''}`)
+                    .html(`<strong>${d.name}</strong><br/>${d.latitude !== null && d.longitude !== null ? `Lat: ${d.latitude}<br/>Lon: ${d.longitude}<br/>` : ''}${d.value !== null && d.value !== undefined ? `${this.getValueLabel(elementVal)}: ${this.formatValue(d.value, elementVal)}` : 'No data'}`)
                     .style('left', (event.pageX + 10) + 'px')
                     .style('top', (event.pageY - 10) + 'px');
             })

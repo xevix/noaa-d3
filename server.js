@@ -121,11 +121,21 @@ app.get('/api/stations/:year/:element', async (req, res) => {
             geoFilter = `\n                AND (states.name = '${state}')\n            `;
         }
 
+        // New query: join weather data to compute average value per station
         const query = `
-            WITH available_stations AS (
-                SELECT DISTINCT ID as station_id
-                FROM read_parquet('${dataPath}')
-                WHERE ID IS NOT NULL
+            WITH station_values AS (
+                SELECT 
+                    w.ID as station_id,
+                    AVG(CAST(w.DATA_VALUE AS DOUBLE)) as avg_value
+                FROM read_parquet('${dataPath}') w
+                LEFT JOIN read_parquet('${stationsPath}') st ON w.ID = st.id
+                LEFT JOIN read_parquet('${countriesPath}') c ON SUBSTRING(w.ID, 1, 2) = c.code
+                LEFT JOIN read_parquet('${statesPath}') states ON st.state = states.code
+                WHERE w.DATA_VALUE IS NOT NULL 
+                    AND w.DATA_VALUE != -9999
+                    AND (w.Q_FLAG IS NULL OR w.Q_FLAG != 'X')
+                    ${geoFilter}
+                GROUP BY w.ID
             )
             SELECT 
                 s.station_id,
@@ -133,16 +143,18 @@ app.get('/api/stations/:year/:element', async (req, res) => {
                 c.name as country_name,
                 states.name as state_name,
                 st.latitude as latitude,
-                st.longitude as longitude
-            FROM available_stations s
-            LEFT JOIN read_parquet('${stationsPath}') st
-                ON s.station_id = st.id
-            LEFT JOIN read_parquet('${countriesPath}') c
-                ON SUBSTRING(s.station_id, 1, 2) = c.code
-            LEFT JOIN read_parquet('${statesPath}') states
-                ON st.state = states.code
+                st.longitude as longitude,
+                sv.avg_value as value
+            FROM station_values sv
+            JOIN (
+                SELECT DISTINCT ID as station_id
+                FROM read_parquet('${dataPath}')
+                WHERE ID IS NOT NULL
+            ) s ON sv.station_id = s.station_id
+            LEFT JOIN read_parquet('${stationsPath}') st ON s.station_id = st.id
+            LEFT JOIN read_parquet('${countriesPath}') c ON SUBSTRING(s.station_id, 1, 2) = c.code
+            LEFT JOIN read_parquet('${statesPath}') states ON st.state = states.code
             WHERE st.name IS NOT NULL
-                ${geoFilter}
             ORDER BY station_name
             LIMIT 1000
         `;
@@ -158,7 +170,8 @@ app.get('/api/stations/:year/:element', async (req, res) => {
                     country: row.country_name,
                     state: row.state_name,
                     latitude: row.latitude !== undefined ? Number(row.latitude) : null,
-                    longitude: row.longitude !== undefined ? Number(row.longitude) : null
+                    longitude: row.longitude !== undefined ? Number(row.longitude) : null,
+                    value: row.value !== undefined && row.value !== null ? convertValue(Number(row.value), element) : null
                 }));
 
                 console.log(`Found ${stations.length} stations for ${year}/${element}`);
