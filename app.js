@@ -2280,73 +2280,40 @@ LIMIT 1000;
         // Check if it's a Canadian province
         const isCAProvince = caProvinces.map(s => s.toLowerCase()).includes(normalizedState.toLowerCase());
 
-        let mapData, features, projection, path;
+        let selectedFeature;
+        
         if (isUSState) {
             // Load US states TopoJSON
-            mapData = await fetch('data/us-states-10m.json').then(r => r.json());
-            features = topojson.feature(mapData, mapData.objects.states).features;
+            const mapData = await fetch('data/us-states-10m.json').then(r => r.json());
+            const features = topojson.feature(mapData, mapData.objects.states).features;
             // Find the state feature by name (case-insensitive)
-            const stateFeature = features.find(f => f.properties.name.toLowerCase() === selectedState.toLowerCase());
-            if (!stateFeature) {
-                this.mapG.append('text')
-                    .attr('x', this.mapWidth / 2)
-                    .attr('y', this.mapHeight / 2)
-                    .attr('text-anchor', 'middle')
-                    .style('font-size', '18px')
-                    .style('fill', '#7f8c8d')
-                    .text(`State boundary not found for ${selectedState}`);
-                return;
-            }
-            // Fit projection to the state with margins for better space utilization
-            projection = d3.geoAlbersUsa();
-            const margin = {top: 60, right: 40, bottom: 40, left: 40};
-            projection.fitExtent(
-                [[margin.left, margin.top], [this.mapWidth - margin.right, this.mapHeight - margin.bottom]],
-                stateFeature
-            );
-            path = d3.geoPath().projection(projection);
-            // Draw the state boundary
-            this.mapG.append('path')
-                .datum(stateFeature)
-                .attr('d', path)
-                .attr('fill', '#e0e7ef')
-                .attr('stroke', '#333')
-                .attr('stroke-width', 1.5);
+            selectedFeature = features.find(f => f.properties.name.toLowerCase() === selectedState.toLowerCase());
+            console.log("stateFeature", selectedFeature);
         } else if (isCAProvince) {
             // Load Canada provinces GeoJSON
-            mapData = await fetch('data/canada-provinces-territories.geo.json').then(r => r.json());
-            features = mapData.features;
+            const mapData = await fetch('data/canada-provinces-territories.geo.json').then(r => r.json());
+            const features = mapData.features;
             // Find the province feature by name (case-insensitive)
-            const provinceFeature = features.find(f => f.properties.prov_name_en && f.properties.prov_name_en.toLowerCase() === normalizedState.toLowerCase());
+            selectedFeature = features.find(f => f.properties.prov_name_en && f.properties.prov_name_en.toLowerCase() === normalizedState.toLowerCase());
             console.log("normalizedState", normalizedState);
-            console.log("provinceFeature", provinceFeature);
+            console.log("provinceFeature", selectedFeature);
             console.log("features", features);
-            if (!provinceFeature) {
-                this.mapG.append('text')
-                    .attr('x', this.mapWidth / 2)
-                    .attr('y', this.mapHeight / 2)
-                    .attr('text-anchor', 'middle')
-                    .style('font-size', '18px')
-                    .style('fill', '#7f8c8d')
-                    .text(`Province boundary not found for ${selectedState}`);
-                return;
-            }
-            // Fit projection to the province with margins for better space utilization
-            projection = d3.geoMercator();
-            const margin = {top: 60, right: 40, bottom: 40, left: 40};
-            projection.fitExtent(
-                [[margin.left, margin.top], [this.mapWidth - margin.right, this.mapHeight - margin.bottom]],
-                provinceFeature
-            );
-            path = d3.geoPath().projection(projection);
-            // Draw the province boundary
-            this.mapG.append('path')
-                .datum(provinceFeature)
-                .attr('d', path)
-                .attr('fill', '#e0e7ef')
-                .attr('stroke', '#333')
-                .attr('stroke-width', 1.5);
-        } else {
+        }
+
+        // Shared code from here - handle both US states and Canada provinces
+        if (!selectedFeature) {
+            const entityType = isUSState ? 'State' : 'Province';
+            this.mapG.append('text')
+                .attr('x', this.mapWidth / 2)
+                .attr('y', this.mapHeight / 2)
+                .attr('text-anchor', 'middle')
+                .style('font-size', '18px')
+                .style('fill', '#7f8c8d')
+                .text(`${entityType} boundary not found for ${selectedState}`);
+            return;
+        }
+
+        if (!isUSState && !isCAProvince) {
             // Not a supported state/province
             this.mapG.append('text')
                 .attr('x', this.mapWidth / 2)
@@ -2357,6 +2324,81 @@ LIMIT 1000;
                 .text('State/province map not available for this selection.');
             return;
         }
+
+        // Set up projection based on region
+        let projection;
+        if (isUSState) {
+            // Use standard projection and margins for US states
+            projection = d3.geoAlbersUsa();
+            const margin = {top: 60, right: 40, bottom: 40, left: 40};
+            projection.fitExtent(
+                [[margin.left, margin.top], [this.mapWidth - margin.right, this.mapHeight - margin.bottom]],
+                selectedFeature
+            );
+        } else {
+            // Manual projection setup for Canada provinces - bypass broken bounds calculation
+            projection = d3.geoMercator();
+            const margin = {top: 60, right: 40, bottom: 40, left: 40};
+            
+            // Debug: Let's examine the actual coordinate data
+            console.log("=== RAW COORDINATE DEBUG ===");
+            console.log("Geometry type:", selectedFeature.geometry.type);
+            console.log("Number of polygons:", selectedFeature.geometry.coordinates.length);
+            
+            // Look at the first few coordinates from the first polygon
+            if (selectedFeature.geometry.coordinates[0] && selectedFeature.geometry.coordinates[0][0]) {
+                const firstRing = selectedFeature.geometry.coordinates[0][0];
+                console.log("First 5 coordinates from first polygon:");
+                for (let i = 0; i < Math.min(5, firstRing.length); i++) {
+                    console.log(`  ${i}: [${firstRing[i][0]}, ${firstRing[i][1]}]`);
+                }
+                
+                // Calculate a simple average of first polygon coordinates
+                let sumLon = 0, sumLat = 0;
+                firstRing.forEach(coord => {
+                    sumLon += coord[0];
+                    sumLat += coord[1];
+                });
+                const avgLon = sumLon / firstRing.length;
+                const avgLat = sumLat / firstRing.length;
+                console.log("Manual average center of first polygon:", [avgLon, avgLat]);
+                
+                // Use this manual center
+                projection.scale(8000);
+                projection.center([avgLon, avgLat]);
+            } else {
+                // Fallback
+                projection.scale(8000);
+                projection.center([-125, 54]);
+            }
+            
+            // For Canada provinces, manually set scale and center instead of using fitExtent
+            // This bypasses the broken bounds calculation entirely
+            const availableWidth = this.mapWidth - margin.left - margin.right;
+            const availableHeight = this.mapHeight - margin.top - margin.bottom;
+            
+            // Position in the available space
+            projection.translate([
+                margin.left + availableWidth / 2,
+                margin.top + availableHeight / 2
+            ]);
+            
+            console.log("Final projection scale:", projection.scale());
+            console.log("Final projection center:", projection.center());
+            console.log("Final projection translate:", projection.translate());
+            console.log("=== END DEBUG ===");
+        }
+
+        // Shared code for drawing the boundary and plotting stations
+        const path = d3.geoPath().projection(projection);
+        
+        // Draw the state/province boundary
+        this.mapG.append('path')
+            .datum(selectedFeature)
+            .attr('d', path)
+            .attr('fill', '#e0e7ef')
+            .attr('stroke', '#333')
+            .attr('stroke-width', 1.5);
 
         // Fetch stations for the selected state/province
         const year = document.getElementById('year-select').value;
