@@ -2336,11 +2336,11 @@ LIMIT 1000;
                 selectedFeature
             );
         } else {
-            // Manual projection setup for Canada provinces - bypass broken bounds calculation
+            // Dynamic projection setup for Canada provinces - works for all provinces
             projection = d3.geoMercator();
             const margin = {top: 60, right: 40, bottom: 40, left: 40};
             
-            // Calculate bounds from ALL polygons, not just the first one
+            // Calculate bounds from ALL polygons
             let minLon = Infinity, maxLon = -Infinity, minLat = Infinity, maxLat = -Infinity;
             let totalCoords = 0;
             let sumLon = 0, sumLat = 0;
@@ -2366,33 +2366,54 @@ LIMIT 1000;
             const lonRange = maxLon - minLon;
             const latRange = maxLat - minLat;
             
-            // Adjust center point to focus slightly north to ensure northern parts are visible
-            const adjustedCenterLat = centerLat + (latRange * 0.15); // Move center 15% north (changed from south)
-            
-            // Calculate appropriate scale based on the bounds and available space
+            // Calculate appropriate scale and centering based on province characteristics
             const availableWidth = this.mapWidth - margin.left - margin.right;
             const availableHeight = this.mapHeight - margin.top - margin.bottom;
             
-            // Calculate scale to fit the province bounds in the available space
+            // Calculate scale with conservative padding to prevent clipping
             const lonScale = availableWidth / lonRange;
             const latScale = availableHeight / latRange;
-            const baseScale = Math.min(lonScale, latScale) * 0.4; // Reduced from 0.5 to 0.4 to zoom out
+            let scaleFactor = 0.3; // More conservative base scale factor
+            
+            // Adjust scale factor based on province size - more conservative across the board
+            if (latRange > 20) { // Extremely large provinces like Nunavut
+                scaleFactor = 0.2;
+            } else if (latRange > 15) { // Very large provinces 
+                scaleFactor = 0.25;
+            } else if (latRange > 10) { // Large provinces like BC, Ontario
+                scaleFactor = 0.3;
+            } else if (latRange > 5) { // Medium provinces
+                scaleFactor = 0.35;
+            } else { // Smaller provinces like PEI, Nova Scotia
+                scaleFactor = 0.45;
+            }
+            
+            const baseScale = Math.min(lonScale, latScale) * scaleFactor;
             const d3Scale = baseScale * 100;
+            
+            // More conservative center adjustment to prevent clipping
+            let adjustedCenterLat = centerLat;
+            let adjustedCenterLon = centerLon;
+            
+            // For very wide provinces, ensure they don't clip horizontally
+            if (lonRange > latRange * 2) { // Very wide provinces
+                // No horizontal adjustment needed, just use center
+            }
+            
+            // For tall provinces, make smaller northward adjustment to prevent top clipping
+            if (latRange > lonRange * 1.5) { // Tall provinces
+                adjustedCenterLat = centerLat + (latRange * 0.02); // Very small northward adjustment
+            }
             
             // Set projection with calculated values
             projection.scale(d3Scale);
-            projection.center([centerLon, adjustedCenterLat]); // Use adjusted center
+            projection.center([adjustedCenterLon, adjustedCenterLat]);
             
-            // Position in container with less aggressive translation
+            // Position in container with extra margin safety
             projection.translate([
                 margin.left + availableWidth / 2,
-                margin.top + availableHeight / 2 + 30  // Reduced back to 30px
+                margin.top + availableHeight / 2
             ]);
-            
-            console.log("Final projection scale:", projection.scale());
-            console.log("Final projection center:", projection.center());
-            console.log("Final projection translate:", projection.translate());
-            console.log("=== END DEBUG ===");
         }
 
         // Shared code for drawing the boundary and plotting stations
