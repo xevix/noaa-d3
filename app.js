@@ -1045,7 +1045,12 @@ class NOAAWeatherVisualizer {
         const caProvinces = [
             'Alberta','British Columbia','Manitoba','New Brunswick','Newfoundland and Labrador','Nova Scotia','Ontario','Prince Edward Island','Quebec','Saskatchewan','Northwest Territories','Nunavut','Yukon'
         ];
+        console.log('DEBUG: Checking state/province condition');
+        console.log('DEBUG: selectedState =', selectedState);
+        console.log('DEBUG: caProvinces includes =', caProvinces.map(p => p.toLowerCase()).includes(selectedState.toLowerCase()));
+        
         if (selectedState && (usStates.map(s => s.toLowerCase()).includes(selectedState.toLowerCase()) || caProvinces.map(p => p.toLowerCase()).includes(selectedState.toLowerCase()))) {
+            console.log('DEBUG: State/province condition matched! Calling createStateOrProvinceMap');
             // Determine country from state/province
             let country = usStates.map(s => s.toLowerCase()).includes(selectedState.toLowerCase()) ? 'United States' : 'Canada';
             await this.createStateOrProvinceMap(country, selectedState, element);
@@ -1068,10 +1073,51 @@ class NOAAWeatherVisualizer {
         // Create projection and path generator
         const projection = d3.geoNaturalEarth1();
         const margin = {top: 40, right: 20, bottom: 60, left: 20};
-        projection.fitExtent(
-            [[margin.left, margin.top], [this.mapWidth - margin.right, this.mapHeight - margin.bottom]],
-            countries
-        );
+        
+        // If Canada is selected, zoom in on Canada specifically
+        if (selectedCountry === 'Canada') {
+            const canadaFeature = countries.features.find(d => {
+                const countryName = d.properties.NAME || d.properties.name;
+                return this.normalizeCountryName(countryName) === 'Canada';
+            });
+            if (canadaFeature) {
+                projection.fitExtent(
+                    [[margin.left, margin.top], [this.mapWidth - margin.right, this.mapHeight - margin.bottom]],
+                    canadaFeature
+                );
+            } else {
+                // Fallback to world view if Canada feature not found
+                projection.fitExtent(
+                    [[margin.left, margin.top], [this.mapWidth - margin.right, this.mapHeight - margin.bottom]],
+                    countries
+                );
+            }
+        } else if (selectedCountry) {
+            // For other selected countries, also zoom in on that specific country
+            const selectedCountryFeature = countries.features.find(d => {
+                const countryName = d.properties.NAME || d.properties.name;
+                return this.normalizeCountryName(countryName) === selectedCountry;
+            });
+            if (selectedCountryFeature) {
+                projection.fitExtent(
+                    [[margin.left, margin.top], [this.mapWidth - margin.right, this.mapHeight - margin.bottom]],
+                    selectedCountryFeature
+                );
+            } else {
+                // Fallback to world view if country feature not found
+                projection.fitExtent(
+                    [[margin.left, margin.top], [this.mapWidth - margin.right, this.mapHeight - margin.bottom]],
+                    countries
+                );
+            }
+        } else {
+            // Default world view when no country is selected
+            projection.fitExtent(
+                [[margin.left, margin.top], [this.mapWidth - margin.right, this.mapHeight - margin.bottom]],
+                countries
+            );
+        }
+        
         const path = d3.geoPath().projection(projection);
 
         // Create data lookup for countries and states
@@ -2251,9 +2297,13 @@ LIMIT 1000;
                     .text(`State boundary not found for ${selectedState}`);
                 return;
             }
-            // Fit projection to the state
+            // Fit projection to the state with margins for better space utilization
             projection = d3.geoAlbersUsa();
-            projection.fitSize([this.mapWidth, this.mapHeight], stateFeature);
+            const margin = {top: 60, right: 40, bottom: 40, left: 40};
+            projection.fitExtent(
+                [[margin.left, margin.top], [this.mapWidth - margin.right, this.mapHeight - margin.bottom]],
+                stateFeature
+            );
             path = d3.geoPath().projection(projection);
             // Draw the state boundary
             this.mapG.append('path')
@@ -2281,9 +2331,13 @@ LIMIT 1000;
                     .text(`Province boundary not found for ${selectedState}`);
                 return;
             }
-            // Fit projection to the province
+            // Fit projection to the province with margins for better space utilization
             projection = d3.geoMercator();
-            projection.fitSize([this.mapWidth, this.mapHeight], provinceFeature);
+            const margin = {top: 60, right: 40, bottom: 40, left: 40};
+            projection.fitExtent(
+                [[margin.left, margin.top], [this.mapWidth - margin.right, this.mapHeight - margin.bottom]],
+                provinceFeature
+            );
             path = d3.geoPath().projection(projection);
             // Draw the province boundary
             this.mapG.append('path')
