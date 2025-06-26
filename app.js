@@ -2340,47 +2340,53 @@ LIMIT 1000;
             projection = d3.geoMercator();
             const margin = {top: 60, right: 40, bottom: 40, left: 40};
             
-            // Debug: Let's examine the actual coordinate data
-            console.log("=== RAW COORDINATE DEBUG ===");
-            console.log("Geometry type:", selectedFeature.geometry.type);
-            console.log("Number of polygons:", selectedFeature.geometry.coordinates.length);
+            // Calculate bounds from ALL polygons, not just the first one
+            let minLon = Infinity, maxLon = -Infinity, minLat = Infinity, maxLat = -Infinity;
+            let totalCoords = 0;
+            let sumLon = 0, sumLat = 0;
             
-            // Look at the first few coordinates from the first polygon
-            if (selectedFeature.geometry.coordinates[0] && selectedFeature.geometry.coordinates[0][0]) {
-                const firstRing = selectedFeature.geometry.coordinates[0][0];
-                console.log("First 5 coordinates from first polygon:");
-                for (let i = 0; i < Math.min(5, firstRing.length); i++) {
-                    console.log(`  ${i}: [${firstRing[i][0]}, ${firstRing[i][1]}]`);
-                }
-                
-                // Calculate a simple average of first polygon coordinates
-                let sumLon = 0, sumLat = 0;
-                firstRing.forEach(coord => {
-                    sumLon += coord[0];
-                    sumLat += coord[1];
+            selectedFeature.geometry.coordinates.forEach((polygon, polyIndex) => {
+                polygon[0].forEach(coord => {
+                    const lon = coord[0];
+                    const lat = coord[1];
+                    
+                    minLon = Math.min(minLon, lon);
+                    maxLon = Math.max(maxLon, lon);
+                    minLat = Math.min(minLat, lat);
+                    maxLat = Math.max(maxLat, lat);
+                    
+                    sumLon += lon;
+                    sumLat += lat;
+                    totalCoords++;
                 });
-                const avgLon = sumLon / firstRing.length;
-                const avgLat = sumLat / firstRing.length;
-                console.log("Manual average center of first polygon:", [avgLon, avgLat]);
-                
-                // Use this manual center
-                projection.scale(8000);
-                projection.center([avgLon, avgLat]);
-            } else {
-                // Fallback
-                projection.scale(8000);
-                projection.center([-125, 54]);
-            }
+            });
             
-            // For Canada provinces, manually set scale and center instead of using fitExtent
-            // This bypasses the broken bounds calculation entirely
+            const centerLon = sumLon / totalCoords;
+            const centerLat = sumLat / totalCoords;
+            const lonRange = maxLon - minLon;
+            const latRange = maxLat - minLat;
+            
+            // Adjust center point to focus slightly north to ensure northern parts are visible
+            const adjustedCenterLat = centerLat + (latRange * 0.15); // Move center 15% north (changed from south)
+            
+            // Calculate appropriate scale based on the bounds and available space
             const availableWidth = this.mapWidth - margin.left - margin.right;
             const availableHeight = this.mapHeight - margin.top - margin.bottom;
             
-            // Position in the available space
+            // Calculate scale to fit the province bounds in the available space
+            const lonScale = availableWidth / lonRange;
+            const latScale = availableHeight / latRange;
+            const baseScale = Math.min(lonScale, latScale) * 0.4; // Reduced from 0.5 to 0.4 to zoom out
+            const d3Scale = baseScale * 100;
+            
+            // Set projection with calculated values
+            projection.scale(d3Scale);
+            projection.center([centerLon, adjustedCenterLat]); // Use adjusted center
+            
+            // Position in container with less aggressive translation
             projection.translate([
                 margin.left + availableWidth / 2,
-                margin.top + availableHeight / 2
+                margin.top + availableHeight / 2 + 30  // Reduced back to 30px
             ]);
             
             console.log("Final projection scale:", projection.scale());
