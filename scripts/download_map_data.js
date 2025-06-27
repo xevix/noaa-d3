@@ -139,7 +139,7 @@ async function downloadMapData() {
             if (fs.existsSync(filePath)) {
                 const currentSize = getFileSize(filePath);
                 console.log(`   Current file exists (${currentSize})`);
-                console.log('   Downloading new version...');
+                continue;
             }
             
             await downloadFile(mapFile.url, filePath);

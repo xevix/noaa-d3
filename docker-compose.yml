@@ -13,4 +13,4 @@ services:
       - "3002:3002"
     environment:
       - NODE_ENV=development
-    command: npm run dev 
+    command: npm run dev p
