@@ -1042,8 +1042,10 @@ class NOAAWeatherVisualizer {
         const usStates = [
             'Alabama','Alaska','Arizona','Arkansas','California','Colorado','Connecticut','Delaware','Florida','Georgia','Hawaii','Idaho','Illinois','Indiana','Iowa','Kansas','Kentucky','Louisiana','Maine','Maryland','Massachusetts','Michigan','Minnesota','Mississippi','Missouri','Montana','Nebraska','Nevada','New Hampshire','New Jersey','New Mexico','New York','North Carolina','North Dakota','Ohio','Oklahoma','Oregon','Pennsylvania','Rhode Island','South Carolina','South Dakota','Tennessee','Texas','Utah','Vermont','Virginia','Washington','West Virginia','Wisconsin','Wyoming'
         ];
+        // Canadian provinces/territories that should trigger the province map
+        // This should match the keys and values from caProvinceNameMap in createStateOrProvinceMap
         const caProvinces = [
-            'Alberta','British Columbia','Manitoba','New Brunswick','Newfoundland and Labrador','Nova Scotia','Ontario','Prince Edward Island','Quebec','Saskatchewan','Northwest Territories','Nunavut','Yukon'
+            'Alberta','British Columbia','Manitoba','New Brunswick','Newfoundland and Labrador','Nova Scotia','Ontario','Prince Edward Island','Quebec','Saskatchewan','Yukon','YUKON TERRITORY','AB','BC','MB','NB','NL','NS','ON','PE','QC','SK','YT'
         ];
         console.log('DEBUG: Checking state/province condition');
         console.log('DEBUG: selectedState =', selectedState);
@@ -2222,6 +2224,9 @@ LIMIT 1000;
     }
 
     async createStateOrProvinceMap(selectedCountry, selectedState, element) {
+        console.log(`🗺️ Creating state/province map for: ${selectedCountry} - ${selectedState}`);
+        console.log(`Element: ${element}`);
+        
         // Clear the map container
         const container = d3.select('#map-container');
         container.selectAll('svg').remove();
@@ -2342,7 +2347,7 @@ LIMIT 1000;
         } else {
             // Dynamic projection setup for Canada provinces - works for all provinces
             projection = d3.geoMercator();
-            const margin = {top: 200, right: 40, bottom: 200, left: 40};
+            const margin = {top: 250, right: 40, bottom: 200, left: 40};
             
             // Calculate bounds from ALL polygons
             let minLon = Infinity, maxLon = -Infinity, minLat = Infinity, maxLat = -Infinity;
