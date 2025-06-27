@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "npm run fetch-metadata && concurrently \"npm run server:dev\" \"sleep 2 && npm run client:dev\"",
+    "dev": "npm run fetch-all && concurrently \"npm run server:dev\" \"sleep 2 && npm run client:dev\"",
     "server:dev": "nodemon server.js",
     "client:dev": "browser-sync start --proxy 'localhost:3000' --port 3001 --ui-port 3002 --files '*.html,*.css,*.js' --ignore 'node_modules' --ignore '__tests__' --ignore 'coverage' --no-notify",
     "build": "echo 'No build step required for this project'",
