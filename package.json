@@ -14,6 +14,8 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
+    "fetch-all": "npm run fetch-map-data && npm run fetch-metadata",
+    "fetch-map-data": "node scripts/download_map_data.js",
     "fetch-metadata": "node scripts/fixed_width_to_csv.js"
   },
   "keywords": [],

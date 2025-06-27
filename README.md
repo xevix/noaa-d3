@@ -25,9 +25,9 @@ Data is sourced from [NOAA via AWS S3](https://registry.opendata.aws/noaa-ghcn/)
    ```bash
    npm install
    ```
-3. Fetch dimensions
+3. Fetch dimensions and maps
    ```bash
-   npm run fetch-metadata
+   npm run fetch-all
    ```
 
 ---
