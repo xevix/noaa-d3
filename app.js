@@ -1176,10 +1176,19 @@ class NOAAWeatherVisualizer {
                 const normalizedCountryName = this.normalizeCountryName(countryName);
                 const countrySelect = document.getElementById('country-select');
                 const stateSelect = document.getElementById('state-select');
+                const stationSelect = document.getElementById('station-select');
 
                 if (countrySelect.value === normalizedCountryName) {
-                    // If clicking the selected country, deselect it
-                    countrySelect.value = '';
+                    // If clicking the selected country, check if a station is also selected
+                    if (stationSelect.value) {
+                        // If a station is selected, deselect the station instead of the country
+                        stationSelect.value = '';
+                        stationSelect.dispatchEvent(new Event('change'));
+                        return;
+                    } else {
+                        // If no station is selected, deselect the country
+                        countrySelect.value = '';
+                    }
                 } else {
                     // Otherwise, try to select the new country
                     const countryExists = Array.from(countrySelect.options).some(opt => opt.value === normalizedCountryName);
@@ -1266,8 +1275,83 @@ class NOAAWeatherVisualizer {
                 .text('Reset Filter');
         }
 
+        // Add station points if a country is selected (but no state)
+        if (selectedCountry && !selectedState) {
+            await this.drawStationPointsForCountry(selectedCountry, element, projection, colorScale);
+        }
+
         // Add legend
         this.addMapLegend(colorScale, element, dataExtent);
+    }
+
+    async drawStationPointsForCountry(selectedCountry, element, projection, worldColorScale) {
+        // Fetch stations for the selected country
+        const year = document.getElementById('year-select').value;
+        const elementVal = document.getElementById('element-select').value;
+        
+        try {
+            const stationsResp = await fetch(`/api/stations/${year}/${elementVal}?country=${encodeURIComponent(selectedCountry)}`);
+            let stations = [];
+            if (stationsResp.ok) {
+                stations = await stationsResp.json();
+            }
+
+            // Only draw points if we have stations with coordinates
+            const validStations = stations.filter(s => s.longitude !== null && s.latitude !== null);
+            
+            if (validStations.length === 0) {
+                console.log(`No stations with coordinates found for ${selectedCountry}`);
+                return;
+            }
+
+            // Create a color scale based on the actual station values for better contrast
+            const stationValues = validStations.map(s => s.value).filter(v => v !== null && v !== undefined);
+            let stationColorScale = worldColorScale; // fallback to world color scale
+            
+            if (stationValues.length > 0) {
+                const stationDataExtent = d3.extent(stationValues);
+                stationColorScale = d3.scaleSequential()
+                    .interpolator(elementVal === 'PRCP' ? d3.interpolateBlues : d3.interpolateRdYlBu)
+                    .domain(stationDataExtent);
+            }
+
+            // Plot stations as circles
+            this.mapG.selectAll('.station-dot')
+                .data(validStations)
+                .enter()
+                .append('circle')
+                .attr('class', 'station-dot')
+                .attr('cx', d => projection([d.longitude, d.latitude])[0])
+                .attr('cy', d => projection([d.longitude, d.latitude])[1])
+                .attr('r', 5)
+                .attr('fill', d => (d.value !== null && d.value !== undefined) ? stationColorScale(d.value) : '#f8f9fa')
+                .attr('stroke', '#fff')
+                .attr('stroke-width', 1.5)
+                .attr('opacity', 0.8)
+                .style('cursor', 'pointer')
+                .on('mouseover', (event, d) => {
+                    this.tooltip
+                        .style('opacity', 1)
+                        .html(`<strong>${d.name}</strong><br/>${d.latitude !== null && d.longitude !== null ? `Lat: ${d.latitude}<br/>Lon: ${d.longitude}<br/>` : ''}${d.value !== null && d.value !== undefined ? `${this.getValueLabel(elementVal)}: ${this.formatValue(d.value, elementVal)}` : 'No data'}`)
+                        .style('left', (event.pageX + 10) + 'px')
+                        .style('top', (event.pageY - 10) + 'px');
+                })
+                .on('mouseout', () => {
+                    this.tooltip.style('opacity', 0);
+                })
+                .on('click', (event, d) => {
+                    // Select the clicked station
+                    const stationSelect = document.getElementById('station-select');
+                    stationSelect.value = d.id;
+                    stationSelect.dispatchEvent(new Event('change'));
+                    event.stopPropagation(); // Prevent country click event
+                });
+
+            console.log(`Drew ${validStations.length} station points for ${selectedCountry}`);
+            
+        } catch (error) {
+            console.error('Error fetching stations for country:', error);
+        }
     }
 
     showStateDataDisplay(worldData, element, selectedCountry, selectedState) {
