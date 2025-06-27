@@ -2237,15 +2237,15 @@ LIMIT 1000;
         const usStates = [
             'Alabama','Alaska','Arizona','Arkansas','California','Colorado','Connecticut','Delaware','Florida','Georgia','Hawaii','Idaho','Illinois','Indiana','Iowa','Kansas','Kentucky','Louisiana','Maine','Maryland','Massachusetts','Michigan','Minnesota','Mississippi','Missouri','Montana','Nebraska','Nevada','New Hampshire','New Jersey','New Mexico','New York','North Carolina','North Dakota','Ohio','Oklahoma','Oregon','Pennsylvania','Rhode Island','South Carolina','South Dakota','Tennessee','Texas','Utah','Vermont','Virginia','Washington','West Virginia','Wisconsin','Wyoming'
         ];
+        // Canadian provinces/territories available in the map data
+        // Note: This list matches what's actually available in canada-provinces-territories.geo.json
         const caProvinceNameMap = {
             "AB": "Alberta",
-            "BC": "British Columbia",
+            "BC": "British Columbia", 
             "MB": "Manitoba",
             "NB": "New Brunswick",
             "NL": "Newfoundland and Labrador",
             "NS": "Nova Scotia",
-            "NT": "Northwest Territories",
-            "NU": "Nunavut",
             "ON": "Ontario",
             "PE": "Prince Edward Island",
             "QC": "Quebec",
@@ -2253,17 +2253,16 @@ LIMIT 1000;
             "YT": "Yukon",
             "BRITISH COLUMBIA": "British Columbia",
             "ALBERTA": "Alberta",
-            "MANITOBA": "Manitoba",
+            "MANITOBA": "Manitoba", 
             "NEW BRUNSWICK": "New Brunswick",
             "NEWFOUNDLAND AND LABRADOR": "Newfoundland and Labrador",
             "NOVA SCOTIA": "Nova Scotia",
-            "NORTHWEST TERRITORIES": "Northwest Territories",
-            "NUNAVUT": "Nunavut",
             "ONTARIO": "Ontario",
             "PRINCE EDWARD ISLAND": "Prince Edward Island",
             "QUEBEC": "Quebec",
             "SASKATCHEWAN": "Saskatchewan",
-            "YUKON": "Yukon"
+            "YUKON": "Yukon",
+            "YUKON TERRITORY": "Yukon"
         };
         const caProvinces = Object.values(caProvinceNameMap);
 
@@ -2290,14 +2289,19 @@ LIMIT 1000;
             selectedFeature = features.find(f => f.properties.name.toLowerCase() === selectedState.toLowerCase());
             console.log("stateFeature", selectedFeature);
         } else if (isCAProvince) {
-            // Load Canada provinces GeoJSON
+            // Load Canada provinces GeoJSON (downloaded via scripts/download_map_data.js)
             const mapData = await fetch('data/canada-provinces-territories.geo.json').then(r => r.json());
             const features = mapData.features;
             // Find the province feature by name (case-insensitive)
-            selectedFeature = features.find(f => f.properties.prov_name_en && f.properties.prov_name_en.toLowerCase() === normalizedState.toLowerCase());
-            console.log("normalizedState", normalizedState);
-            console.log("provinceFeature", selectedFeature);
-            console.log("features", features);
+            // The GeoJSON file has 'name' property for English names and 'nom' for French names
+            selectedFeature = features.find(f => 
+                f.properties.name && f.properties.name.toLowerCase() === normalizedState.toLowerCase()
+            );
+            console.log("Looking for Canadian province:", normalizedState);
+            console.log("Province feature found:", selectedFeature ? selectedFeature.properties.name : "Not found");
+            if (!selectedFeature) {
+                console.log("Available provinces:", features.map(f => f.properties.name).sort());
+            }
         }
 
         // Shared code from here - handle both US states and Canada provinces
